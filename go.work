@@ -1,0 +1,13 @@
+go 1.25.10
+
+use (
+	./admin-service
+	./api-gateway
+	./communication-service
+	./dispatch-service
+	./identity-service
+	./load-tester
+	./marketplace-service
+	./payment-service
+	./shared-contracts
+)

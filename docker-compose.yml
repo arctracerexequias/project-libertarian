@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: marketplace
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d marketplace"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - marketplace-network
+
+  db-migrate:
+    image: migrate/migrate
+    volumes:
+      - ./database/migrations:/migrations
+    command:
+      - -path=/migrations/
+      - -database=postgres://user:password@db:5432/marketplace?sslmode=disable
+      - up
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+
+  api-gateway:
+    build: ./api-gateway
+    environment:
+      JWT_SECRET: super_secret_jwt_key_for_development
+    ports:
+      - "8080:8080"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      identity-service:
+        condition: service_started
+      marketplace-service:
+        condition: service_started
+    networks:
+      - marketplace-network
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: identity-service/Dockerfile
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/marketplace
+      JWT_SECRET: super_secret_jwt_key_for_development
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+
+  marketplace-service:
+    build:
+      context: .
+      dockerfile: marketplace-service/Dockerfile
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/marketplace
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+
+
+  communication-service:
+    build:
+      context: .
+      dockerfile: communication-service/Dockerfile
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/marketplace
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/marketplace
+      STRIPE_SECRET_KEY: your_stripe_secret_key
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+
+  admin-service:
+    build: ./admin-service
+    ports:
+      - "8085:8085"
+    networks:
+      - marketplace-network
+
+  dispatch-service:
+    build:
+      context: .
+      dockerfile: dispatch-service/Dockerfile
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/marketplace
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+
+networks:
+  marketplace-network:
+    driver: bridge
