@@ -141,7 +141,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Text(
-                  'Suggested Budget: \$${_insights!['average'].toStringAsFixed(2)}',
+                  'Suggested Budget: ₱${_insights!['average'].toStringAsFixed(2)}',
                   style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
@@ -159,7 +159,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _budgetController,
-              decoration: const InputDecoration(labelText: 'Max Budget (\$)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Max Budget (₱)', border: OutlineInputBorder()),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 24),

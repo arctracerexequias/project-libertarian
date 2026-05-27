@@ -30,9 +30,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   UserProfile? _userProfile;
   Map<String, dynamic>? _escrowStatus;
 
+  late JobStatus _currentStatus;
+  bool _statusUpdated = false;
+  bool _isBacking = false;
+  bool _hasRated = false;
+  Bid? _acceptedBid;
+
   @override
   void initState() {
     super.initState();
+    _currentStatus = widget.job.status;
     _fetchEscrowStatus();
     _fetchProfile();
   }
@@ -49,8 +56,23 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   Future<void> _fetchEscrowStatus() async {
     final status = await _paymentService.getEscrowStatus(widget.job.id);
+    Bid? acceptedBid;
+    try {
+      final bids = await _marketplaceService.getBids(widget.job.id);
+      for (final b in bids) {
+        if (b.status.toLowerCase() == 'accepted') {
+          acceptedBid = b;
+          break;
+        }
+      }
+    } catch (e) {
+      print('Error fetching bids for provider name: $e');
+    }
     if (mounted) {
-      setState(() => _escrowStatus = status);
+      setState(() {
+        _escrowStatus = status;
+        _acceptedBid = acceptedBid;
+      });
     }
   }
 
@@ -116,7 +138,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Job accepted successfully!')),
         );
-        Navigator.pop(context, true);
+        if (mounted) {
+          setState(() {
+            _currentStatus = JobStatus.accepted;
+            _statusUpdated = true;
+          });
+          _fetchEscrowStatus();
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to accept job.')),
@@ -138,7 +166,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Status updated to ${newStatus.name.toUpperCase()}')),
       );
-      Navigator.pop(context, true);
+      if (mounted) {
+        setState(() {
+          _currentStatus = newStatus;
+          _statusUpdated = true;
+        });
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to update job status.')),
@@ -152,7 +185,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
 
     if (isProvider) {
-      if (widget.job.status == JobStatus.published || widget.job.status == JobStatus.bidding) {
+      if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding) {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -180,7 +213,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         );
       }
 
-      if (widget.job.status == JobStatus.accepted) {
+      if (_currentStatus == JobStatus.accepted) {
         // Obfuscate location: stable deterministic offset
         final offsetLat = (widget.job.id.hashCode % 100 - 50) * 0.0001;
         final offsetLng = (widget.job.id.hashCode % 80 - 40) * 0.0001;
@@ -273,229 +306,340 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     final isProvider = _userProfile?.role == 'provider';
 
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.job.title)),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
+    return PopScope(
+      canPop: _isBacking,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (context.mounted) {
+          Navigator.of(context).pop(_statusUpdated);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.job.title),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              setState(() {
+                _isBacking = true;
+              });
+              Navigator.of(context).pop(_statusUpdated);
+            },
+          ),
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _currentStatus.name.toUpperCase(), 
+                      style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
                   ),
-                  child: Text(
-                    widget.job.status.name.toUpperCase(), 
-                    style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ),
-                Text(
-                  widget.job.maxBudget != null ? '\$${widget.job.maxBudget!.toStringAsFixed(2)}' : 'No Offer',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(widget.job.description, style: const TextStyle(fontSize: 16, height: 1.4)),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 16),
-            _buildMapSection(isProvider),
-            const SizedBox(height: 8),
-            if (_isActionLoading)
-              const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
-            else ...[
-              // Providers Options
-              if (isProvider) ...[
-                if (widget.job.status == JobStatus.published || widget.job.status == JobStatus.bidding) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _acceptJobDirect,
-                          icon: const Icon(Icons.check_circle_outline),
-                          label: const Text('Accept Direct'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SubmitBidScreen(
-                                jobId: widget.job.id,
-                                category: widget.job.category,
-                                onBidSubmitted: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Counter offer submitted successfully!')),
-                                  );
-                                  Navigator.pop(context, true);
-                                },
-                              ),
-                            ),
-                          ),
-                          icon: const Icon(Icons.edit_note),
-                          label: const Text('Counter Offer'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    widget.job.maxBudget != null ? '₱${widget.job.maxBudget!.toStringAsFixed(2)}' : 'No Offer',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
                   ),
                 ],
-                if (widget.job.status == JobStatus.accepted)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _updateStatus(JobStatus.enRoute),
-                      icon: const Icon(Icons.directions_run),
-                      label: const Text('Go En Route'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
+              ),
+              const SizedBox(height: 16),
+              Text(widget.job.description, style: const TextStyle(fontSize: 16, height: 1.4)),
+              if (_acceptedBid != null) ...[
+                const SizedBox(height: 16),
+                Card(
+                  color: Colors.blue.shade50,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Colors.blue,
+                      child: Icon(Icons.person, color: Colors.white),
                     ),
-                  ),
-                if (widget.job.status == JobStatus.enRoute)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _updateStatus(JobStatus.inProgress),
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Start Work'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepOrange,
-                        foregroundColor: Colors.white,
-                      ),
+                    title: const Text('Assigned Provider', style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                    subtitle: Text(
+                      _acceptedBid!.providerName.isNotEmpty 
+                          ? _acceptedBid!.providerName 
+                          : 'Service Provider',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                     ),
-                  ),
-                if (widget.job.status == JobStatus.inProgress)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.engineering, color: Colors.green),
-                        SizedBox(width: 8),
-                        Text('Work in Progress - Do your best!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        const Icon(Icons.star, color: Colors.amber, size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          _acceptedBid!.providerRating.toStringAsFixed(1),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   ),
+                ),
               ],
-
-              // Customers Options
-              if (!isProvider) ...[
-                if (widget.job.status == JobStatus.published || widget.job.status == JobStatus.bidding)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (context) => ViewBidsScreen(jobId: widget.job.id, onBidAccepted: () => Navigator.pop(context)))),
-                      icon: const Icon(Icons.local_offer),
-                      label: const Text('Review Counter Offers'),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              _buildMapSection(isProvider),
+              const SizedBox(height: 8),
+              if (_isActionLoading)
+                const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+              else ...[
+                // Providers Options
+                if (isProvider) ...[
+                  if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _acceptJobDirect,
+                            icon: const Icon(Icons.check_circle_outline),
+                            label: const Text('Accept Direct'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SubmitBidScreen(
+                                  jobId: widget.job.id,
+                                  category: widget.job.category,
+                                  onBidSubmitted: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Counter offer submitted successfully!')),
+                                    );
+                                    Navigator.pop(context, true);
+                                  },
+                                ),
+                              ),
+                            ),
+                            icon: const Icon(Icons.edit_note),
+                            label: const Text('Counter Offer'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                if (widget.job.status == JobStatus.accepted && (_escrowStatus == null || _escrowStatus!['status'] != 'HELD'))
-                  _isFunding 
-                    ? const CircularProgressIndicator()
-                    : SizedBox(
+                  ],
+                  if (_currentStatus == JobStatus.accepted)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _updateStatus(JobStatus.enRoute),
+                        icon: const Icon(Icons.directions_run),
+                        label: const Text('Go En Route'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  if (_currentStatus == JobStatus.enRoute)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _updateStatus(JobStatus.inProgress),
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Start Work'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepOrange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  if (_currentStatus == JobStatus.inProgress) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.engineering, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text('Work in Progress - Do your best!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _updateStatus(JobStatus.completed),
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text('Complete Work'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+
+                // Customers Options
+                if (!isProvider) ...[
+                  if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (context) => ViewBidsScreen(jobId: widget.job.id, onBidAccepted: () => Navigator.pop(context)))),
+                        icon: const Icon(Icons.local_offer),
+                        label: const Text('Review Counter Offers'),
+                      ),
+                    ),
+                  if (_currentStatus == JobStatus.accepted && (_escrowStatus == null || _escrowStatus!['status'] != 'HELD'))
+                    _isFunding 
+                      ? const CircularProgressIndicator()
+                      : SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton.icon(
+                            onPressed: _fundEscrow,
+                            icon: const Icon(Icons.account_balance_wallet),
+                            label: const Text('Fund Escrow'),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                          ),
+                        ),
+                  if (_escrowStatus != null && _escrowStatus!['status'] == 'HELD') ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.lock, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text('Payment Secured in Escrow', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_currentStatus == JobStatus.completed) ...[
+                    if (!_hasRated) ...[
+                      SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton.icon(
-                          onPressed: _fundEscrow,
-                          icon: const Icon(Icons.account_balance_wallet),
-                          label: const Text('Fund Escrow'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (context) => RatingDialog(
+                              jobId: widget.job.id,
+                              onRated: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Provider rated successfully!')),
+                                );
+                                setState(() {
+                                  _hasRated = true;
+                                });
+                              },
+                            ),
+                          ),
+                          icon: const Icon(Icons.star_rate),
+                          label: const Text('Rate & Review Provider'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
                         ),
                       ),
-                if (_escrowStatus != null && _escrowStatus!['status'] == 'HELD') ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.lock, color: Colors.green),
-                        SizedBox(width: 8),
-                        Text('Payment Secured in Escrow', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (widget.job.status == JobStatus.completed && _escrowStatus != null && _escrowStatus!['status'] == 'HELD')
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _releasePayment,
-                      icon: const Icon(Icons.payment),
-                      label: const Text('Release Payment'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                    ),
-                  ),
-                if (widget.job.status == JobStatus.accepted || widget.job.status == JobStatus.enRoute || widget.job.status == JobStatus.inProgress) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () => showDialog(
-                        context: context,
-                        builder: (context) => RatingDialog(
-                          jobId: widget.job.id,
-                          onRated: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Job marked as completed and provider rated!')),
-                            );
-                            Navigator.pop(context, true);
-                          },
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text('You have rated this provider', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                          ],
                         ),
                       ),
-                      icon: const Icon(Icons.check_circle),
-                      label: const Text('Mark as Completed'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
+                  if (_currentStatus == JobStatus.completed && _escrowStatus != null && _escrowStatus!['status'] == 'HELD') ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _releasePayment,
+                        icon: const Icon(Icons.payment),
+                        label: const Text('Release Payment'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_currentStatus == JobStatus.accepted || _currentStatus == JobStatus.enRoute || _currentStatus == JobStatus.inProgress) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => showDialog(
+                          context: context,
+                          builder: (context) => RatingDialog(
+                            jobId: widget.job.id,
+                            onRated: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Job marked as completed and provider rated!')),
+                              );
+                              Navigator.pop(context, true);
+                            },
+                          ),
+                        ),
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text('Mark as Completed'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ],
+                
+                const SizedBox(height: 16),
+                _isChatLoading 
+                  ? const CircularProgressIndicator()
+                  : SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _navigateToChat,
+                        icon: const Icon(Icons.chat),
+                        label: const Text('Chat with Participant'),
+                      ),
+                    ),
               ],
-              
-              const SizedBox(height: 16),
-              _isChatLoading 
-                ? const CircularProgressIndicator()
-                : SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _navigateToChat,
-                      icon: const Icon(Icons.chat),
-                      label: const Text('Chat with Participant'),
-                    ),
-                  ),
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -1,27 +1,10 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'config.dart';
+import 'network_service.dart';
 
 class PaymentService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: AppConfig.baseUrl,
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 3),
-  ));
+  final Dio _dio = NetworkService().dio;
 
-  final _storage = const FlutterSecureStorage();
-
-  PaymentService() {
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await _storage.read(key: 'jwt_token');
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        return handler.next(options);
-      },
-    ));
-  }
+  PaymentService();
 
   Future<Map<String, dynamic>?> initEscrow(String jobId, double amount) async {
     try {

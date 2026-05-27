@@ -67,7 +67,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_profile == null) return const Scaffold(body: Center(child: Text('Error loading profile.')));
+    
+    if (_profile == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('My Profile')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text('Error loading profile.', style: TextStyle(fontSize: 18)),
+              const SizedBox(height: 24),
+              ElevatedButton(onPressed: _loadProfile, child: const Text('Retry')),
+              TextButton(
+                onPressed: () async {
+                  await _biometricService.clearSettings();
+                  await _authService.logout();
+                  if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                },
+                child: const Text('Sign Out'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

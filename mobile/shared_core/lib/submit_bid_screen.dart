@@ -76,7 +76,7 @@ class _SubmitBidScreenState extends State<SubmitBidScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Market Insights:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Average: \$${_insights!['average'].toStringAsFixed(2)}'),
+                    Text('Average: ₱${_insights!['average'].toStringAsFixed(2)}'),
                     Text('Completed Jobs: ${_insights!['count']}'),
                   ],
                 ),
@@ -84,7 +84,7 @@ class _SubmitBidScreenState extends State<SubmitBidScreen> {
             TextField(
               controller: _amountController,
               decoration: InputDecoration(
-                labelText: _isCounterOffer ? 'Your Proposed Price (\$)' : 'Bid Amount (\$)',
+                labelText: _isCounterOffer ? 'Your Proposed Price (₱)' : 'Bid Amount (₱)',
                 border: const OutlineInputBorder()
               ),
               keyboardType: TextInputType.number,

@@ -17,7 +17,7 @@ func NewMarketplaceRepository(db *pgxpool.Pool) domain.MarketplaceRepository {
 }
 
 func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng, radius float64) ([]domain.Job, error) {
-	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), created_at FROM jobs WHERE status IN ('PUBLISHED', 'BIDDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS')"
+	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), created_at FROM jobs WHERE status IN ('PUBLISHED', 'BIDDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED')"
 	var args []interface{}
 	argCount := 1
 
@@ -80,9 +80,11 @@ func (r *marketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) ([]d
 	rows, err := r.db.Query(ctx, `
 		SELECT b.id, b.job_id, b.provider_id, b.amount, b.estimated_time, b.message, b.status, b.created_at,
 		       COALESCE(r.avg_score, 5.0) as provider_rating,
-		       p.is_verified as provider_verified
+		       p.is_verified as provider_verified,
+		       u.full_name as provider_name
 		FROM bids b
 		JOIN providers p ON b.provider_id = p.user_id
+		JOIN users u ON p.user_id = u.id
 		LEFT JOIN (
 			SELECT provider_id, AVG(score) as avg_score
 			FROM ratings
@@ -97,7 +99,7 @@ func (r *marketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) ([]d
 	var bids []domain.Bid
 	for rows.Next() {
 		var b domain.Bid
-		err := rows.Scan(&b.ID, &b.JobID, &b.ProviderID, &b.Amount, &b.EstimatedTime, &b.Message, &b.Status, &b.CreatedAt, &b.ProviderRating, &b.ProviderVerified)
+		err := rows.Scan(&b.ID, &b.JobID, &b.ProviderID, &b.Amount, &b.EstimatedTime, &b.Message, &b.Status, &b.CreatedAt, &b.ProviderRating, &b.ProviderVerified, &b.ProviderName)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +163,11 @@ func (r *marketplaceRepo) GetBidsByProviderID(ctx context.Context, providerID st
 }
 
 func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID string) ([]domain.Job, error) {
-	rows, err := r.db.Query(ctx, "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), created_at FROM jobs WHERE id IN (SELECT job_id FROM bids WHERE provider_id = $1 AND status = 'ACCEPTED') OR (customer_id = $1 AND status = 'COMPLETED')", providerID)
+	rows, err := r.db.Query(ctx, `
+		SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), created_at 
+		FROM jobs 
+		WHERE id IN (SELECT job_id FROM bids WHERE provider_id = $1 AND status = 'ACCEPTED')
+	`, providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +180,9 @@ func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID str
 			continue
 		}
 		jobs = append(jobs, j)
+	}
+	if jobs == nil {
+		jobs = []domain.Job{}
 	}
 	return jobs, nil
 }

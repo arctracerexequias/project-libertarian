@@ -18,4 +18,6 @@ export 'rating_dialog.dart';
 export 'profile_screen.dart';
 export 'biometric_service.dart';
 export 'biometric_lock_screen.dart';
+export 'network_service.dart';
+export 'boost_service.dart';
 

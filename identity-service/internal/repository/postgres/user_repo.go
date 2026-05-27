@@ -17,13 +17,29 @@ func NewUserRepository(db *pgxpool.Pool) domain.UserRepository {
 }
 
 func (r *userRepo) Create(ctx context.Context, user *domain.User) error {
-	_, err := r.db.Exec(ctx,
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
 		"INSERT INTO users (id, email, password_hash, role, full_name) VALUES ($1, $2, $3, $4, $5)",
 		user.ID, user.Email, user.PasswordHash, user.Role, user.FullName)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
-	return nil
+
+	if user.Role == "provider" {
+		_, err = tx.Exec(ctx,
+			"INSERT INTO providers (user_id, bio, skills, reputation_score, is_verified) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id) DO NOTHING",
+			user.ID, "", []string{}, 5.0, false)
+		if err != nil {
+			return fmt.Errorf("failed to create provider record: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *userRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -49,11 +65,27 @@ func (r *userRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 }
 
 func (r *userRepo) Update(ctx context.Context, user *domain.User) error {
-	_, err := r.db.Exec(ctx,
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
 		"UPDATE users SET full_name = $1, bio = $2, skills = $3, is_verified = $4 WHERE id = $5",
 		user.FullName, user.Bio, user.Skills, user.IsVerified, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
-	return nil
+
+	if user.Role == "provider" {
+		_, err = tx.Exec(ctx,
+			"INSERT INTO providers (user_id, bio, skills, reputation_score, is_verified) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id) DO UPDATE SET bio = $2, skills = $3, is_verified = $5",
+			user.ID, user.Bio, user.Skills, 5.0, user.IsVerified)
+		if err != nil {
+			return fmt.Errorf("failed to update provider record: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }

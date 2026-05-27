@@ -69,7 +69,7 @@ class _ViewBidsScreenState extends State<ViewBidsScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('\$${bid.amount.toStringAsFixed(2)}',
+                                    Text('₱${bid.amount.toStringAsFixed(2)}',
                                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
                                     Row(
                                       children: [

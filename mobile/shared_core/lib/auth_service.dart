@@ -1,28 +1,19 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'config.dart';
+import 'network_service.dart';
 import 'models.dart';
 
 class AuthService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: AppConfig.baseUrl,
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 3),
-  ));
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
 
+  final Dio _dio = NetworkService().dio;
   final _storage = const FlutterSecureStorage();
+  
+  Stream<AuthStatus> get status => NetworkService().authStatus;
 
-  AuthService() {
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await _storage.read(key: 'jwt_token');
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        return handler.next(options);
-      },
-    ));
-  }
+  AuthService._internal();
 
   Future<UserProfile?> register({
     required String email,
@@ -62,6 +53,7 @@ class AuthService {
       if (response.statusCode == 200) {
         final token = response.data['token'];
         await _storage.write(key: 'jwt_token', value: token);
+        NetworkService().notifyAuthenticated();
         return UserProfile.fromJson(response.data['user']);
       }
     } catch (e) {
@@ -95,6 +87,7 @@ class AuthService {
 
   Future<void> logout() async {
     await _storage.delete(key: 'jwt_token');
+    NetworkService().notifyUnauthenticated();
   }
 
   Future<String?> getToken() async {

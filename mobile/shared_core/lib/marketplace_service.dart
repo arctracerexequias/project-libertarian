@@ -1,29 +1,12 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:latlong2/latlong.dart';
-import 'config.dart';
+import 'network_service.dart';
 import 'models.dart';
 
 class MarketplaceService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: AppConfig.baseUrl,
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 3),
-  ));
+  final Dio _dio = NetworkService().dio;
 
-  final _storage = const FlutterSecureStorage();
-
-  MarketplaceService() {
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await _storage.read(key: 'jwt_token');
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        return handler.next(options);
-      },
-    ));
-  }
+  MarketplaceService();
 
   Future<List<Job>> getJobs({String? category, double? lat, double? lng, double? radius}) async {
     try {
@@ -95,6 +78,7 @@ class MarketplaceService {
           status: 'pending',
           providerRating: 5.0,
           providerVerified: false,
+          providerName: '',
           createdAt: DateTime.now(),
         );
       }
@@ -193,8 +177,8 @@ class MarketplaceService {
           'category': category,
           'max_budget': maxBudget,
           'is_emergency': isEmergency,
-          'lat': location?.latitude,
-          'lng': location?.longitude,
+          'lat': location?.latitude ?? 0.0,
+          'lng': location?.longitude ?? 0.0,
         },
       );
 
@@ -211,9 +195,15 @@ class MarketplaceService {
           location: location,
           createdAt: DateTime.now(),
         );
+      } else {
+        print('Create job failed with status: ${response.statusCode}, data: ${response.data}');
       }
     } catch (e) {
-      print('Create job error: $e');
+      if (e is DioException) {
+        print('Create job DioError: ${e.response?.statusCode} - ${e.response?.data}');
+      } else {
+        print('Create job error: $e');
+      }
     }
     return null;
   }

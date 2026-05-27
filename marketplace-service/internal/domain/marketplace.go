@@ -22,15 +22,16 @@ type Job struct {
 }
 
 type Bid struct {
-	ID             string    `json:"id"`
-	JobID          string    `json:"job_id"`
-	ProviderID     string    `json:"provider_id"`
-	Amount         float64   `json:"amount"`
-	EstimatedTime  string    `json:"estimated_time"`
-	Message        string    `json:"message"`
-	Status         string    `json:"status"`
+	ID               string    `json:"id"`
+	JobID            string    `json:"job_id"`
+	ProviderID       string    `json:"provider_id"`
+	Amount           float64   `json:"amount"`
+	EstimatedTime    string    `json:"estimated_time"`
+	Message          string    `json:"message"`
+	Status           string    `json:"status"`
 	ProviderRating   float64   `json:"provider_rating"`
 	ProviderVerified bool      `json:"provider_verified"`
+	ProviderName     string    `json:"provider_name"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

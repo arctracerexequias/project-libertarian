@@ -14,8 +14,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _marketplaceService = MarketplaceService();
   final _dispatchService = DispatchService();
+  final _paymentService = PaymentService();
   final MapController _mapController = MapController();
-  List<Job> _jobs = [];
+  List<Job> _activeJobs = [];
+  List<Job> _completedJobs = [];
   LatLng _currentLocation = const LatLng(37.7749, -122.4194);
 
   @override
@@ -52,8 +54,35 @@ class _HomeScreenState extends State<HomeScreen> {
       lng: _currentLocation.longitude == 0 ? null : _currentLocation.longitude,
       radius: _searchRadius,
     );
+
+    final List<Job> activeJobs = [];
+    final List<Job> completedJobs = [];
+    final List<Future<void>> checks = [];
+
+    for (final job in jobs) {
+      if (job.status != JobStatus.completed) {
+        activeJobs.add(job);
+      } else {
+        checks.add(() async {
+          final escrow = await _paymentService.getEscrowStatus(job.id);
+          if (escrow == null || escrow['status'] == 'HELD') {
+            completedJobs.add(job);
+          }
+        }());
+      }
+    }
+
+    if (checks.isNotEmpty) {
+      await Future.wait(checks);
+    }
+
     if (mounted) {
-      setState(() => _jobs = jobs.where((j) => j.status != JobStatus.completed).toList());
+      setState(() {
+        activeJobs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        completedJobs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _activeJobs = activeJobs;
+        _completedJobs = completedJobs;
+      });
     }
   }
 
@@ -101,11 +130,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text('What do you need?', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ),
               _buildCategoryGrid(),
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text('Active Jobs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ),
-              _buildActiveJobsList(),
+              if (_completedJobs.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.only(left: 16.0, right: 16.0, top: 24.0, bottom: 8.0),
+                  child: Text('Completed Jobs (Pending Settlement)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                ),
+                _buildCompletedJobsList(),
+              ],
+              if (_activeJobs.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+                  child: Text('Active Jobs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+                _buildActiveJobsList(),
+              ],
+              if (_activeJobs.isEmpty && _completedJobs.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Text('No active or completed jobs.', style: TextStyle(color: Colors.grey)),
+                  ),
+                ),
             ],
           ),
         ),
@@ -197,25 +242,86 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildActiveJobsList() {
-    if (_jobs.isEmpty) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20.0), child: Text('No active jobs.')));
-    }
+  Widget _buildCompletedJobsList() {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _jobs.length,
+      itemCount: _completedJobs.length,
       itemBuilder: (context, index) {
-        final job = _jobs[index];
+        final job = _completedJobs[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: Colors.green.shade50,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.green.shade200, width: 1),
+          ),
+          child: ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Colors.green,
+              child: Icon(Icons.check, color: Colors.white),
+            ),
+            title: Text(job.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('COMPLETED - AWAITING SETTLEMENT', style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600, fontSize: 12)),
+            onTap: () async {
+              final updated = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => JobDetailScreen(job: job)),
+              );
+              if (updated == true) {
+                _refreshJobs();
+              }
+            },
+            trailing: IconButton(
+              icon: const Icon(Icons.chevron_right, color: Colors.green),
+              onPressed: () async {
+                final updated = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => JobDetailScreen(job: job)),
+                );
+                if (updated == true) {
+                  _refreshJobs();
+                }
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveJobsList() {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _activeJobs.length,
+      itemBuilder: (context, index) {
+        final job = _activeJobs[index];
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: ListTile(
             title: Text(job.title),
             subtitle: Text(job.status.name.toUpperCase()),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => JobDetailScreen(job: job))),
+            onTap: () async {
+              final updated = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => JobDetailScreen(job: job)),
+              );
+              if (updated == true) {
+                _refreshJobs();
+              }
+            },
             trailing: IconButton(
               icon: const Icon(Icons.chevron_right),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => JobDetailScreen(job: job))),
+              onPressed: () async {
+                final updated = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => JobDetailScreen(job: job)),
+                );
+                if (updated == true) {
+                  _refreshJobs();
+                }
+              },
             ),
           ),
         );
