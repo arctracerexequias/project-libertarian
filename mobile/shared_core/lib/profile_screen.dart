@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'models.dart';
@@ -15,9 +16,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   final _biometricService = BiometricService();
   UserProfile? _profile;
-  bool _isLoading = true;
+  bool _isLoading = false;
   bool _biometricsSupported = false;
   bool _biometricsEnabled = false;
+  StreamSubscription<UserProfile?>? _userSubscription;
 
 
   final List<String> _allCategories = [
@@ -27,18 +29,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _profile = _authService.currentUser;
+    if (_profile == null) {
+      _loadProfile();
+    } else {
+      _fetchBiometricStatus();
+    }
+    _userSubscription = _authService.userStream.listen((user) {
+      if (mounted) {
+        setState(() => _profile = user);
+      }
+    });
   }
 
-  Future<void> _loadProfile() async {
-    final p = await _authService.getProfile();
+  @override
+  void dispose() {
+    _userSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchBiometricStatus() async {
     final supported = await _biometricService.isBiometricsSupported();
     final enabled = await _biometricService.isBiometricsEnabled();
     if (mounted) {
       setState(() {
-        _profile = p;
         _biometricsSupported = supported;
         _biometricsEnabled = enabled;
+      });
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() => _isLoading = true);
+    final p = await _authService.getProfile();
+    await _fetchBiometricStatus();
+    if (mounted) {
+      setState(() {
+        _profile = p;
         _isLoading = false;
       });
     }

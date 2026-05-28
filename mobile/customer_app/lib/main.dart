@@ -63,19 +63,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // Pre-verify token before showing biometric lock
       final bool isValid = await _authService.verifyMe();
       if (!isValid) {
-        // Token might be expired or server is unreachable
-        // For security, if token is definitely invalid (401), verifyMe() or interceptor will clear it.
-        // We double check here if token still exists.
         final stillExists = await _authService.getToken();
         if (stillExists == null) {
-          setState(() {
-            _isLoggedIn = false;
-            _isLoading = false;
-          });
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = false;
+              _isLoading = false;
+            });
+          }
           return;
         }
-        // If it still exists, maybe it was a connection error, so we might want to allow lock screen
-        // or just show an error. For now, let's be strict.
+      } else {
+        // Token is valid, profile should have been fetched by verifyMe
+        // but we ensure it's loaded here just in case.
+        if (_authService.currentUser == null) {
+          await _authService.getProfile();
+        }
       }
 
       final hasBiometrics = await _biometricService.isBiometricsEnabled();

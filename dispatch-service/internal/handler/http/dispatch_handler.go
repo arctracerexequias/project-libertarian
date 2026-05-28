@@ -49,3 +49,24 @@ func (h *DispatchHandler) Dispatch(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"locations": locations})
 }
+
+func (h *DispatchHandler) GetPartners(c *gin.Context) {
+	var req struct {
+		Lat      float64 `json:"lat" binding:"required"`
+		Lng      float64 `json:"lng" binding:"required"`
+		Category string  `json:"category"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Default radius for partners is 2km as requested
+	locations, err := h.service.GetPrivacyPartners(c.Request.Context(), req.Lat, req.Lng, req.Category, 2000.0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch privacy partners"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"partners": locations})
+}

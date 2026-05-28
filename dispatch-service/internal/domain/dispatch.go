@@ -28,4 +28,5 @@ type DispatchRepository interface {
 type DispatchService interface {
 	UpdateProviderLocation(ctx context.Context, providerID string, lat, lng float64) error
 	DispatchJob(ctx context.Context, req DispatchRequest) ([]ProviderLocation, error)
+	GetPrivacyPartners(ctx context.Context, lat, lng float64, category string, radius float64) ([]ProviderLocation, error)
 }

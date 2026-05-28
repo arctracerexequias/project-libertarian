@@ -261,8 +261,17 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.green,
               child: Icon(Icons.check, color: Colors.white),
             ),
-            title: Text(job.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('COMPLETED - AWAITING SETTLEMENT', style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600, fontSize: 12)),
+            title: Text(
+              job.title, 
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+            subtitle: const Text(
+              'COMPLETED - AWAITING SETTLEMENT', 
+              style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
             onTap: () async {
               final updated = await Navigator.push(
                 context,
@@ -272,18 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _refreshJobs();
               }
             },
-            trailing: IconButton(
-              icon: const Icon(Icons.chevron_right, color: Colors.green),
-              onPressed: () async {
-                final updated = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => JobDetailScreen(job: job)),
-                );
-                if (updated == true) {
-                  _refreshJobs();
-                }
-              },
-            ),
+            trailing: const Icon(Icons.chevron_right, color: Colors.green),
           ),
         );
       },
@@ -300,7 +298,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: ListTile(
-            title: Text(job.title),
+            title: Text(
+              job.title,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
             subtitle: Text(job.status.name.toUpperCase()),
             onTap: () async {
               final updated = await Navigator.push(
@@ -311,18 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _refreshJobs();
               }
             },
-            trailing: IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () async {
-                final updated = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => JobDetailScreen(job: job)),
-                );
-                if (updated == true) {
-                  _refreshJobs();
-                }
-              },
-            ),
+            trailing: const Icon(Icons.chevron_right),
           ),
         );
       },

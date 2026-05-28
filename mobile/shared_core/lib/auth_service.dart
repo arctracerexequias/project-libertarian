@@ -12,6 +12,12 @@ class AuthService {
   final _storage = const FlutterSecureStorage();
   
   Stream<AuthStatus> get status => NetworkService().authStatus;
+  
+  UserProfile? _currentUser;
+  UserProfile? get currentUser => _currentUser;
+  
+  final _userController = StreamController<UserProfile?>.broadcast();
+  Stream<UserProfile?> get userStream => _userController.stream;
 
   AuthService._internal();
 
@@ -30,12 +36,13 @@ class AuthService {
       });
 
       if (response.statusCode == 201) {
-        return UserProfile(
+        final profile = UserProfile(
           id: response.data['id'],
           fullName: fullName,
           email: email,
           role: role,
         );
+        return profile;
       }
     } catch (e) {
       print('Registration error: $e');
@@ -53,8 +60,13 @@ class AuthService {
       if (response.statusCode == 200) {
         final token = response.data['token'];
         await _storage.write(key: 'jwt_token', value: token);
+        
+        final profile = UserProfile.fromJson(response.data['user']);
+        _currentUser = profile;
+        _userController.add(_currentUser);
+        
         NetworkService().notifyAuthenticated();
-        return UserProfile.fromJson(response.data['user']);
+        return profile;
       }
     } catch (e) {
       print('Login error: $e');
@@ -66,7 +78,10 @@ class AuthService {
     try {
       final response = await _dio.get('/identity/auth/profile');
       if (response.statusCode == 200) {
-        return UserProfile.fromJson(response.data);
+        final profile = UserProfile.fromJson(response.data);
+        _currentUser = profile;
+        _userController.add(_currentUser);
+        return profile;
       }
     } catch (e) {
       print('Get profile error: $e');
@@ -78,7 +93,10 @@ class AuthService {
     try {
       final response = await _dio.put('/identity/auth/profile',
           data: {'full_name': fullName, 'bio': bio, 'skills': skills});
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        await getProfile(); // Refresh cache
+        return true;
+      }
     } catch (e) {
       print('Update profile error: $e');
     }
@@ -87,6 +105,8 @@ class AuthService {
 
   Future<void> logout() async {
     await _storage.delete(key: 'jwt_token');
+    _currentUser = null;
+    _userController.add(null);
     NetworkService().notifyUnauthenticated();
   }
 
@@ -97,10 +117,21 @@ class AuthService {
   Future<bool> verifyMe() async {
     try {
       final response = await _dio.post('/identity/auth/verify-me');
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        await getProfile(); // Auto-load profile data on verification
+        return true;
+      } else if (response.statusCode == 401) {
+        _currentUser = null;
+        _userController.add(null);
+        NetworkService().notifyUnauthenticated();
+      }
     } catch (e) {
       print('Verification error: $e');
     }
     return false;
+  }
+
+  void dispose() {
+    _userController.close();
   }
 }

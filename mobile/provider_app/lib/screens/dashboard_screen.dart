@@ -19,6 +19,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final MapController _mapController = MapController();
   List<Job> _availableJobs = [];
   List<Job> _activeJobs = [];
+  List<LatLng> _partnerLocations = [];
   bool _isTracking = false;
   UserProfile? _profile;
   LatLng _currentLocation = const LatLng(37.7749, -122.4194);
@@ -37,8 +38,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  double _serviceRadius = 3000.0; // Default 3km (3000m)
-  double _sliderRadius = 3000.0; // Slider visual value
+  double _serviceRadius = 2000.0; // Standard 2km range as requested
+  double _sliderRadius = 2000.0; 
 
   Future<void> _loadAll() async {
     final p = await _authService.getProfile();
@@ -47,6 +48,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final lat = pos?.latitude ?? 37.7749;
     final lng = pos?.longitude ?? -122.4194;
 
+    // Fetch Privacy Partners within 2km range
+    final partners = await _dispatchService.getPartners(lat, lng, '');
+    
     List<Job> allJobs = [];
 
     if (p != null) {
@@ -62,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         searchConducted = true;
       } else {
         // Static coverage
-        final baseRadius = 3000.0;
+        final baseRadius = 2000.0; // Standardized to 2km
         final expandedRadius = p.isCoverageBoostActive ? baseRadius + 2000.0 : baseRadius;
         
         // Search primary
@@ -117,6 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _profile = p;
         _currentLocation = LatLng(lat, lng);
+        _partnerLocations = partners;
         
         if (_profile != null && _profile!.skills.isNotEmpty) {
           _availableJobs = allJobs.where((j) {
@@ -540,6 +545,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   borderColor: Colors.blue,
                   borderStrokeWidth: 2,
                 ),
+                // Privacy Partners (Semi-transparent circles)
+                ..._partnerLocations.map((loc) => CircleMarker<Object>(
+                  point: loc,
+                  radius: 500, // 500m radius for partners
+                  useRadiusInMeter: true,
+                  color: Colors.indigo.withOpacity(0.1),
+                  borderColor: Colors.indigo.withOpacity(0.3),
+                  borderStrokeWidth: 1,
+                )),
               ],
             ),
             MarkerLayer(
@@ -602,17 +616,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   return Card(
                     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: ListTile(
-                      title: Text(job.title),
+                      title: Text(
+                        job.title,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(job.category),
+                          Text(
+                            job.category,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           if (job.status == JobStatus.accepted)
-                            const Text('Funds Secured in Escrow ✅', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                            const Text('Funds Secured in Escrow ✅', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      trailing: Text('₱${job.maxBudget?.toStringAsFixed(2) ?? "N/A"}', 
-                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                      trailing: Text(
+                        '₱${job.maxBudget?.toStringAsFixed(0) ?? "N/A"}', 
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                      ),
                       onTap: () async {
                         final refresh = await Navigator.push(
                           context,
@@ -736,26 +762,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(statusIcon, color: statusColor, size: 14),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    statusText,
-                                    style: TextStyle(
-                                      color: statusColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(statusIcon, color: statusColor, size: 14),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        statusText,
+                                        style: TextStyle(
+                                          color: statusColor,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                             Text(
@@ -775,6 +806,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -783,6 +816,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             color: Colors.grey.shade600,
                             fontSize: 13,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         const SizedBox(height: 12),
                         Row(

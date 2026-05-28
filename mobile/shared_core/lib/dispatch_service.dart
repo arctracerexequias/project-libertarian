@@ -53,6 +53,26 @@ class DispatchService {
     return [];
   }
 
+  Future<List<LatLng>> getPartners(double lat, double lng, String category) async {
+    try {
+      final response = await _dio.post('/dispatch/partners', data: {
+        'lat': lat,
+        'lng': lng,
+        'category': category,
+      });
+      if (response.statusCode == 200) {
+        final List partnersData = response.data['partners'];
+        return partnersData.map((loc) => LatLng(
+          (loc['lat'] as num).toDouble(),
+          (loc['lng'] as num).toDouble(),
+        )).toList();
+      }
+    } catch (e) {
+      print('Get partners error: $e');
+    }
+    return [];
+  }
+
   Future<Position?> getCurrentPosition() async {
     try {
       bool serviceEnabled;

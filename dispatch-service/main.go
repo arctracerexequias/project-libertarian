@@ -38,6 +38,7 @@ func main() {
 
 	r.POST("/location", handler.UpdateLocation)
 	r.POST("/dispatch", handler.Dispatch)
+	r.POST("/partners", handler.GetPartners)
 
 	port := os.Getenv("PORT")
 	if port == "" {

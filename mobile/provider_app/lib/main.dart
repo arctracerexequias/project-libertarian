@@ -65,11 +65,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (!isValid) {
         final stillExists = await _authService.getToken();
         if (stillExists == null) {
-          setState(() {
-            _isLoggedIn = false;
-            _isLoading = false;
-          });
+          if (mounted) {
+            setState(() {
+              _isLoggedIn = false;
+              _isLoading = false;
+            });
+          }
           return;
+        }
+      } else {
+        if (_authService.currentUser == null) {
+          await _authService.getProfile();
         }
       }
 
