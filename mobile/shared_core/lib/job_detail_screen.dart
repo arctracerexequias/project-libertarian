@@ -9,6 +9,7 @@ import 'view_bids_screen.dart';
 import 'chat_screen.dart';
 import 'rating_dialog.dart';
 import 'submit_bid_screen.dart';
+import 'create_job_screen.dart';
 
 class JobDetailScreen extends StatefulWidget {
   final Job job;
