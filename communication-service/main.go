@@ -39,6 +39,7 @@ func main() {
 	chat := r.Group("/chat")
 	{
 		chat.GET("/history/:jobId", handler.GetHistory)
+		chat.POST("/system", handler.SendSystemMessage)
 		chat.GET("/ws", handler.HandleWebSocket)
 	}
 

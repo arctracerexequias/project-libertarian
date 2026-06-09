@@ -5,14 +5,27 @@ import (
 )
 
 type User struct {
-	ID           string   `json:"id"`
-	Email        string   `json:"email"`
-	PasswordHash string   `json:"-"`
-	FullName     string   `json:"full_name"`
-	Role         string   `json:"role"`
-	IsVerified   bool     `json:"is_verified"`
-	Bio          string   `json:"bio"`
-	Skills       []string `json:"skills"`
+	ID                     string         `json:"id"`
+	Email                  string         `json:"email"`
+	PasswordHash           string         `json:"-"`
+	FullName               string         `json:"full_name"`
+	Role                   string         `json:"role"`
+	IsVerified             bool           `json:"is_verified"`
+	Bio                    string         `json:"bio"`
+	Skills                 []string       `json:"skills"`
+	CompletedJobsCount     int            `json:"completed_jobs_count"`
+	AverageRating          float64        `json:"average_rating"`
+	TotalAccumulatedAmount float64        `json:"total_accumulated_amount"`
+	RebookCount            int            `json:"rebook_count"`
+	Establishment          *Establishment `json:"establishment,omitempty"`
+	WalletBalance          float64        `json:"wallet_balance"`
+}
+
+type Establishment struct {
+	Name               string `json:"name"`
+	BusinessType       string `json:"business_type"`
+	RegistrationNumber string `json:"registration_number"`
+	Address            string `json:"address"`
 }
 
 type RegisterRequest struct {

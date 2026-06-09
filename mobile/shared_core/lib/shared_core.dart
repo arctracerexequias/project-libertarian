@@ -20,4 +20,5 @@ export 'biometric_service.dart';
 export 'biometric_lock_screen.dart';
 export 'network_service.dart';
 export 'boost_service.dart';
+export 'provider_bids_screen.dart';
 

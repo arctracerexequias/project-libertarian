@@ -1,0 +1,3 @@
+ALTER TABLE bids DROP COLUMN IF EXISTS decline_reason;
+ALTER TABLE bids DROP COLUMN IF EXISTS counter_amount;
+ALTER TABLE bids DROP COLUMN IF EXISTS counter_by;

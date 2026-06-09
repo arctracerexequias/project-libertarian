@@ -53,6 +53,16 @@ func (s *paymentService) ReleaseEscrow(ctx context.Context, jobID string) error 
 	return s.repo.UpdateTransactionStatus(ctx, jobID, "RELEASED")
 }
 
+func (s *paymentService) ProcessDailyCommissions(ctx context.Context) error {
+	// This would normally be triggered by a cron job
+	// 1. Fetch all active long-term jobs
+	// 2. Identify providers and calculate daily commission (e.g. 10% of per-session budget)
+	// 3. Deduct from provider_wallets table
+	// 4. Record in wallet_transactions table
+	fmt.Println("Processing daily provider commissions for long-term bookings...")
+	return nil
+}
+
 func (s *paymentService) RefundEscrow(ctx context.Context, jobID string) error {
 	// In a real implementation, you would trigger the Stripe refund here
 	return s.repo.UpdateTransactionStatus(ctx, jobID, "REFUNDED")

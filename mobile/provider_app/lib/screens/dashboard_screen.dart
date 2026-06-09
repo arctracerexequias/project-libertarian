@@ -428,6 +428,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Provider Dashboard'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.list_alt, color: Colors.blue),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProviderBidsScreen())),
+            tooltip: 'My Bids',
+          ),
+          IconButton(
             icon: const Icon(Icons.rocket_launch, color: Colors.orange),
             onPressed: _showBoostDialog,
           ),
@@ -571,26 +576,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildEarningsCard(BuildContext context) {
+    final bool isTier1 = _profile?.isTier1Unlocked ?? false;
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Theme.of(context).primaryColor, Colors.blueAccent]),
+        gradient: LinearGradient(
+          colors: isTier1 
+            ? [Colors.amber.shade700, Colors.orange.shade800] 
+            : [Theme.of(context).primaryColor, Colors.blueAccent]
+        ),
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: (isTier1 ? Colors.orange : Colors.blue).withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Total Earnings', style: TextStyle(color: Colors.white70)),
-          Text('₱0.00', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-          SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Jobs: 0', style: TextStyle(color: Colors.white)),
-              Text('Rating: 5.0 ★', style: TextStyle(color: Colors.white)),
+              const Text('Total Earnings', style: TextStyle(color: Colors.white70)),
+              if (isTier1)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.star, color: Colors.white, size: 12),
+                      SizedBox(width: 4),
+                      Text('TIER 1 PRO', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
             ],
+          ),
+          Text(
+            '₱${_profile?.totalAccumulatedAmount.toStringAsFixed(2) ?? "0.00"}', 
+            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Jobs: ${_profile?.completedJobsCount ?? 0}', style: const TextStyle(color: Colors.white)),
+              Text('Rating: ${_profile?.averageRating.toStringAsFixed(1) ?? "0.0"} ★', style: const TextStyle(color: Colors.white)),
+            ],
+          ),
+          if (!isTier1) ...[
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white24),
+            const SizedBox(height: 8),
+            const Text('Next Tier Progress', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            _buildTierRequirement('10 Completed Jobs', (_profile?.completedJobsCount ?? 0) / 10),
+            _buildTierRequirement('4.2 Star Rating', (_profile?.averageRating ?? 0) / 4.2),
+            _buildTierRequirement('₱10,000 Earned', (_profile?.totalAccumulatedAmount ?? 0) / 10000),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTierRequirement(String label, double progress) {
+    final cleanProgress = progress.clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+              Text('${(cleanProgress * 100).toInt()}%', style: const TextStyle(color: Colors.white, fontSize: 10)),
+            ],
+          ),
+          const SizedBox(height: 2),
+          LinearProgressIndicator(
+            value: cleanProgress,
+            backgroundColor: Colors.white12,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            minHeight: 2,
           ),
         ],
       ),

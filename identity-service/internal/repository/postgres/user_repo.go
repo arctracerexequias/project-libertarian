@@ -37,6 +37,23 @@ func (r *userRepo) Create(ctx context.Context, user *domain.User) error {
 		if err != nil {
 			return fmt.Errorf("failed to create provider record: %w", err)
 		}
+
+		// Initialize Wallet
+		_, err = tx.Exec(ctx, "INSERT INTO provider_wallets (provider_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", user.ID)
+		if err != nil {
+			return fmt.Errorf("failed to initialize wallet: %w", err)
+		}
+
+		// Save Establishment if provided
+		if user.Establishment != nil {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO establishments (provider_id, name, business_type, registration_number, address)
+				VALUES ($1, $2, $3, $4, $5)
+			`, user.ID, user.Establishment.Name, user.Establishment.BusinessType, user.Establishment.RegistrationNumber, user.Establishment.Address)
+			if err != nil {
+				return fmt.Errorf("failed to save establishment: %w", err)
+			}
+		}
 	}
 
 	return tx.Commit(ctx)
@@ -50,6 +67,11 @@ func (r *userRepo) GetByEmail(ctx context.Context, email string) (*domain.User, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
+
+	if user.Role == "provider" {
+		r.fetchProviderMetrics(ctx, &user)
+	}
+
 	return &user, nil
 }
 
@@ -61,7 +83,55 @@ func (r *userRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
+
+	if user.Role == "provider" {
+		r.fetchProviderMetrics(ctx, &user)
+	}
+
 	return &user, nil
+}
+
+func (r *userRepo) fetchProviderMetrics(ctx context.Context, user *domain.User) {
+	// 1. Fetch Job Count (Sum of Occurrences) and Total Earnings
+	// Every occurrence in a recurring job counts as 1 job served
+	err := r.db.QueryRow(ctx, `
+		SELECT 
+			COALESCE(SUM(j.total_occurrences), 0),
+			COALESCE(SUM(b.amount), 0.0)
+		FROM jobs j
+		JOIN bids b ON j.id = b.job_id
+		WHERE b.provider_id = $1 AND b.status = 'ACCEPTED' AND j.status = 'COMPLETED'
+	`, user.ID).Scan(&user.CompletedJobsCount, &user.TotalAccumulatedAmount)
+	if err != nil {
+		fmt.Printf("Warning: failed to fetch job metrics for provider %s: %v\n", user.ID, err)
+	}
+
+	// 2. Fetch Average Rating and Rebook Count
+	err = r.db.QueryRow(ctx, `
+		SELECT 
+			COALESCE(AVG(score), 5.0),
+			(SELECT COUNT(*) FROM jobs WHERE parent_job_id IS NOT NULL AND id IN (SELECT job_id FROM bids WHERE provider_id = $1 AND status = 'ACCEPTED'))
+		FROM ratings 
+		WHERE provider_id = $1
+	`, user.ID).Scan(&user.AverageRating, &user.RebookCount)
+	if err != nil {
+		fmt.Printf("Warning: failed to fetch performance metrics for provider %s: %v\n", user.ID, err)
+	}
+
+	// 3. Fetch Establishment
+	var est domain.Establishment
+	err = r.db.QueryRow(ctx, `
+		SELECT name, business_type, registration_number, address 
+		FROM establishments 
+		WHERE provider_id = $1 AND is_active = TRUE 
+		LIMIT 1
+	`, user.ID).Scan(&est.Name, &est.BusinessType, &est.RegistrationNumber, &est.Address)
+	if err == nil {
+		user.Establishment = &est
+	}
+
+	// 4. Fetch Wallet Balance
+	r.db.QueryRow(ctx, "SELECT balance FROM provider_wallets WHERE provider_id = $1", user.ID).Scan(&user.WalletBalance)
 }
 
 func (r *userRepo) Update(ctx context.Context, user *domain.User) error {
@@ -84,6 +154,26 @@ func (r *userRepo) Update(ctx context.Context, user *domain.User) error {
 			user.ID, user.Bio, user.Skills, 5.0, user.IsVerified)
 		if err != nil {
 			return fmt.Errorf("failed to update provider record: %w", err)
+		}
+
+		// Update or Insert Establishment
+		if user.Establishment != nil {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO establishments (provider_id, name, business_type, registration_number, address)
+				VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (id) DO UPDATE SET name = $2, business_type = $3, registration_number = $4, address = $5
+			`, user.ID, user.Establishment.Name, user.Establishment.BusinessType, user.Establishment.RegistrationNumber, user.Establishment.Address)
+			if err != nil {
+				return fmt.Errorf("failed to update establishment: %w", err)
+			}
+		}
+
+		// Update Wallet Balance (for top-ups)
+		if user.WalletBalance > 0 {
+			_, err = tx.Exec(ctx, "UPDATE provider_wallets SET balance = balance + $1 WHERE provider_id = $2", user.WalletBalance, user.ID)
+			if err != nil {
+				return fmt.Errorf("failed to update wallet balance: %w", err)
+			}
 		}
 	}
 

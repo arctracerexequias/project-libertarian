@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log"
 	"net/http"
 
 	"strconv"
@@ -31,6 +32,16 @@ func (h *MarketplaceHandler) GetJobs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
 }
 
+func (h *MarketplaceHandler) GetJobByID(c *gin.Context) {
+	id := c.Param("id")
+	job, err := h.service.GetJob(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
+		return
+	}
+	c.JSON(http.StatusOK, job)
+}
+
 func (h *MarketplaceHandler) PostJob(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -44,12 +55,13 @@ func (h *MarketplaceHandler) PostJob(c *gin.Context) {
 		return
 	}
 
-	jobID, err := h.service.PostJob(c.Request.Context(), userID, req)
+	job, err := h.service.PostJob(c.Request.Context(), userID, req)
 	if err != nil {
+		log.Printf("[POST JOB ERROR] %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create job"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"id": jobID})
+	c.JSON(http.StatusCreated, job)
 }
 
 func (h *MarketplaceHandler) PlaceBid(c *gin.Context) {
@@ -93,6 +105,42 @@ func (h *MarketplaceHandler) AcceptBid(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Bid accepted"})
+}
+
+func (h *MarketplaceHandler) RejectBid(c *gin.Context) {
+	jobID := c.Param("id")
+	bidID := c.Param("bidId")
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// If no body provided, still allow rejection but without reason
+		req.Reason = "Declined by customer"
+	}
+
+	err := h.service.RejectOffer(c.Request.Context(), jobID, bidID, req.Reason)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reject bid"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Bid rejected"})
+}
+
+func (h *MarketplaceHandler) CounterBid(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	bidID := c.Param("bidId")
+	var req domain.CounterBidRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.service.CounterOffer(c.Request.Context(), bidID, userID, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to counter bid"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Counter offer sent"})
 }
 
 func (h *MarketplaceHandler) CompleteJob(c *gin.Context) {
@@ -158,4 +206,20 @@ func (h *MarketplaceHandler) UpdateJobStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job status updated"})
+}
+
+func (h *MarketplaceHandler) CancelJob(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	jobID := c.Param("id")
+	err := h.service.CancelJob(c.Request.Context(), jobID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Job cancelled successfully"})
 }

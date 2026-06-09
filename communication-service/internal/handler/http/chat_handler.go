@@ -40,6 +40,26 @@ func (h *ChatHandler) GetHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, history)
 }
 
+func (h *ChatHandler) SendSystemMessage(c *gin.Context) {
+	var req struct {
+		JobID   string `json:"job_id" binding:"required"`
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	msg, err := h.service.SendMessage(c.Request.Context(), req.JobID, "SYSTEM", req.Content)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send system message"})
+		return
+	}
+
+	h.broadcast(req.JobID, msg)
+	c.JSON(http.StatusOK, msg)
+}
+
 func (h *ChatHandler) HandleWebSocket(c *gin.Context) {
 	jobID := c.Query("jobId")
 	if jobID == "" {

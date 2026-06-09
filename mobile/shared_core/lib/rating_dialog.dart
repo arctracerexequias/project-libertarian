@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'marketplace_service.dart';
+import 'create_job_screen.dart';
+import 'models.dart';
 
 class RatingDialog extends StatefulWidget {
-  final String jobId;
+  final Job job;
   final VoidCallback onRated;
 
-  const RatingDialog({super.key, required this.jobId, required this.onRated});
+  const RatingDialog({super.key, required this.job, required this.onRated});
 
   @override
   State<RatingDialog> createState() => _RatingDialogState();
@@ -19,12 +21,14 @@ class _RatingDialogState extends State<RatingDialog> {
 
   void _submit() async {
     setState(() => _isLoading = true);
-    final success = await _marketplaceService.completeJob(widget.jobId, _score, _commentController.text);
+    final success = await _marketplaceService.completeJob(widget.job.id, _score, _commentController.text);
     setState(() => _isLoading = false);
 
     if (success) {
       widget.onRated();
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context, true); // Return true to indicate success
+      }
     }
   }
 

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/service-marketplace/marketplace-service/internal/domain"
@@ -17,7 +18,7 @@ func NewMarketplaceRepository(db *pgxpool.Pool) domain.MarketplaceRepository {
 }
 
 func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng, radius float64) ([]domain.Job, error) {
-	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), created_at FROM jobs WHERE status IN ('PUBLISHED', 'BIDDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED')"
+	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at FROM jobs WHERE status IN ('PUBLISHED', 'BIDDING')"
 	var args []interface{}
 	argCount := 1
 
@@ -44,7 +45,7 @@ func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng
 	var jobs []domain.Job
 	for rows.Next() {
 		var j domain.Job
-		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.CreatedAt)
+		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
 		if err != nil {
 			continue
 		}
@@ -56,11 +57,22 @@ func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng
 	return jobs, nil
 }
 
+func (r *marketplaceRepo) GetJobByID(ctx context.Context, id string) (*domain.Job, error) {
+	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at FROM jobs WHERE id = $1"
+	var j domain.Job
+	err := r.db.QueryRow(ctx, query, id).Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
 func (r *marketplaceRepo) CreateJob(ctx context.Context, job *domain.Job) error {
 	_, err := r.db.Exec(ctx,
-		"INSERT INTO jobs (id, customer_id, title, description, category, status, max_budget, is_emergency, location) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ST_SetSRID(ST_MakePoint($9, $10), 4326)::geography)",
-		job.ID, job.CustomerID, job.Title, job.Description, job.Category, job.Status, job.MaxBudget, job.IsEmergency, job.Lng, job.Lat)
+		"INSERT INTO jobs (id, customer_id, title, description, category, status, max_budget, is_emergency, location, recurrence_type, total_occurrences, parent_job_id, scheduled_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ST_SetSRID(ST_MakePoint($9, $10), 4326)::geography, $11, $12, $13, $14)",
+		job.ID, job.CustomerID, job.Title, job.Description, job.Category, job.Status, job.MaxBudget, job.IsEmergency, job.Lng, job.Lat, job.RecurrenceType, job.TotalOccurrences, job.ParentJobID, job.ScheduledAt)
 	if err != nil {
+		log.Printf("[DB ERROR] CreateJob: %v", err)
 		return fmt.Errorf("failed to create job: %w", err)
 	}
 	return nil
@@ -79,6 +91,9 @@ func (r *marketplaceRepo) CreateBid(ctx context.Context, bid *domain.Bid) error 
 func (r *marketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) ([]domain.Bid, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT b.id, b.job_id, b.provider_id, b.amount, b.estimated_time, b.message, b.status, b.created_at,
+		       COALESCE(b.decline_reason, '') as decline_reason,
+		       COALESCE(b.counter_amount, 0.0) as counter_amount,
+		       COALESCE(b.counter_by::text, '') as counter_by,
 		       COALESCE(r.avg_score, 5.0) as provider_rating,
 		       p.is_verified as provider_verified,
 		       u.full_name as provider_name
@@ -99,7 +114,7 @@ func (r *marketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) ([]d
 	var bids []domain.Bid
 	for rows.Next() {
 		var b domain.Bid
-		err := rows.Scan(&b.ID, &b.JobID, &b.ProviderID, &b.Amount, &b.EstimatedTime, &b.Message, &b.Status, &b.CreatedAt, &b.ProviderRating, &b.ProviderVerified, &b.ProviderName)
+		err := rows.Scan(&b.ID, &b.JobID, &b.ProviderID, &b.Amount, &b.EstimatedTime, &b.Message, &b.Status, &b.CreatedAt, &b.DeclineReason, &b.CounterAmount, &b.CounterBy, &b.ProviderRating, &b.ProviderVerified, &b.ProviderName)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +137,8 @@ func (r *marketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID string) er
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "UPDATE bids SET status = 'REJECTED' WHERE job_id = $1 AND id != $2", jobID, bidID)
+	// Auto-reject other bids with a reason
+	_, err = tx.Exec(ctx, "UPDATE bids SET status = 'REJECTED', decline_reason = 'Another provider was selected' WHERE job_id = $1 AND id != $2", jobID, bidID)
 	if err != nil {
 		return err
 	}
@@ -132,6 +148,16 @@ func (r *marketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID string) er
 	}
 
 	return tx.Commit(ctx)
+}
+
+func (r *marketplaceRepo) RejectBid(ctx context.Context, jobID, bidID string, reason string) error {
+	_, err := r.db.Exec(ctx, "UPDATE bids SET status = 'REJECTED', decline_reason = $1 WHERE id = $2 AND job_id = $3", reason, bidID, jobID)
+	return err
+}
+
+func (r *marketplaceRepo) CounterBid(ctx context.Context, bidID string, userID string, amount float64, reason string) error {
+	_, err := r.db.Exec(ctx, "UPDATE bids SET status = 'COUNTERED', counter_amount = $1, counter_by = $2, message = CASE WHEN $3 != '' THEN $3 ELSE message END WHERE id = $4", amount, userID, reason, bidID)
+	return err
 }
 
 func (r *marketplaceRepo) CompleteJob(ctx context.Context, jobID, userID string, score int, comment string) error {
@@ -164,7 +190,7 @@ func (r *marketplaceRepo) GetBidsByProviderID(ctx context.Context, providerID st
 
 func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID string) ([]domain.Job, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), created_at 
+		SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at 
 		FROM jobs 
 		WHERE id IN (SELECT job_id FROM bids WHERE provider_id = $1 AND status = 'ACCEPTED')
 	`, providerID)
@@ -175,7 +201,7 @@ func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID str
 	var jobs []domain.Job
 	for rows.Next() {
 		var j domain.Job
-		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.CreatedAt)
+		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
 		if err != nil {
 			continue
 		}
@@ -197,4 +223,23 @@ func (r *marketplaceRepo) GetCategoryInsights(ctx context.Context, category stri
 func (r *marketplaceRepo) UpdateJobStatus(ctx context.Context, jobID string, status string) error {
 	_, err := r.db.Exec(ctx, "UPDATE jobs SET status = $1 WHERE id = $2", status, jobID)
 	return err
+}
+
+func (r *marketplaceRepo) CancelJob(ctx context.Context, jobID string, userID string) error {
+	// Only allow cancellation if user is the customer or the assigned provider
+	// And if the job is not already completed
+	query := `
+		UPDATE jobs 
+		SET status = 'CANCELLED' 
+		WHERE id = $1 AND status NOT IN ('COMPLETED', 'CANCELLED')
+		AND (customer_id = $2 OR id IN (SELECT job_id FROM bids WHERE provider_id = $2 AND status = 'ACCEPTED'))
+	`
+	tag, err := r.db.Exec(ctx, query, jobID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("job not found or unauthorized to cancel")
+	}
+	return nil
 }

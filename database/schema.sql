@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     category TEXT NOT NULL, -- e.g., 'home_repair', 'personal_care'
-    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PUBLISHED', 'BIDDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED', 'DISPUTED')),
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PUBLISHED', 'BIDDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED', 'DISPUTED', 'CANCELLED')),
     max_budget DECIMAL(12, 2),
     location GEOGRAPHY(POINT, 4326) NOT NULL,
     scheduled_at TIMESTAMP WITH TIME ZONE,
@@ -87,9 +87,45 @@ CREATE TABLE IF NOT EXISTS ratings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Establishments Table
+CREATE TABLE IF NOT EXISTS establishments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID NOT NULL REFERENCES providers(user_id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    business_type TEXT NOT NULL, -- e.g., 'Repair Shop', 'Salon'
+    registration_number TEXT,
+    address TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Provider Wallet Table
+CREATE TABLE IF NOT EXISTS provider_wallets (
+    provider_id UUID PRIMARY KEY REFERENCES providers(user_id) ON DELETE CASCADE,
+    balance DECIMAL(12, 2) DEFAULT 0.0,
+    payment_method_type TEXT, -- 'GCASH' or 'MAYA'
+    payment_method_id TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Wallet Transactions (for daily commission deductions)
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider_id UUID REFERENCES providers(user_id) ON DELETE CASCADE,
+    amount DECIMAL(12, 2) NOT NULL,
+    type TEXT NOT NULL, -- 'CREDIT' or 'DEBIT' (commission)
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Final Feature Polish Updates
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN DEFAULT FALSE;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'ONCE' CHECK (recurrence_type IN ('ONCE', 'DAILY', 'WEEKLY', 'BI_MONTHLY', 'MONTHLY'));
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS total_occurrences INT DEFAULT 1;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parent_job_id UUID REFERENCES jobs(id); -- For rebooked jobs
+
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS skills TEXT[]; -- For providers
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS rebook_count INT DEFAULT 0; -- Track rebooking metric
 

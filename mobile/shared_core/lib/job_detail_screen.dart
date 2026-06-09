@@ -179,6 +179,84 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
+  void _cancelJob() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Job'),
+        content: const Text('Are you sure you want to cancel this job? This will trigger a refund if payment is in escrow.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isActionLoading = true);
+      final success = await _marketplaceService.cancelJob(widget.job.id);
+      setState(() => _isActionLoading = false);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Job cancelled successfully.')),
+        );
+        if (mounted) {
+          setState(() {
+            _currentStatus = JobStatus.cancelled;
+            _statusUpdated = true;
+          });
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to cancel job.')),
+        );
+      }
+    }
+  }
+
+  void _showRebookPrompt() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rebook Service?'),
+        content: const Text('Would you like to schedule this provider for another session of this service?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('No')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _navigateToRebook();
+            }, 
+            child: const Text('Yes, Rebook')
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToRebook() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateJobScreen(
+          onJobCreated: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Rebooking scheduled successfully!')),
+            );
+          },
+          initialLocation: widget.job.location,
+          parentJobId: widget.job.id,
+          initialCategory: widget.job.category,
+          initialTitle: widget.job.title,
+          initialDescription: widget.job.description,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapSection(bool isProvider) {
     if (widget.job.location == null) {
       return const SizedBox.shrink();
@@ -419,9 +497,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 builder: (context) => SubmitBidScreen(
                                   jobId: widget.job.id,
                                   category: widget.job.category,
+                                  currentPrice: widget.job.maxBudget ?? 0,
+                                  isCounter: true,
                                   onBidSubmitted: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Counter offer submitted successfully!')),
+                                      const SnackBar(content: Text('Counter-offer submitted successfully!')),
                                     );
                                     Navigator.pop(context, true);
                                   },
@@ -512,7 +592,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         onPressed: () => Navigator.push(context, MaterialPageRoute(
                           builder: (context) => ViewBidsScreen(jobId: widget.job.id, onBidAccepted: () => Navigator.pop(context)))),
                         icon: const Icon(Icons.local_offer),
-                        label: const Text('Review Counter Offers'),
+                        label: const Text('Review Offers & Counters'),
                       ),
                     ),
                   if (_currentStatus == JobStatus.accepted && (_escrowStatus == null || _escrowStatus!['status'] != 'HELD'))
@@ -549,20 +629,23 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton.icon(
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (context) => RatingDialog(
-                              jobId: widget.job.id,
-                              onRated: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Provider rated successfully!')),
-                                );
-                                setState(() {
-                                  _hasRated = true;
-                                });
-                              },
-                            ),
-                          ),
+                          onPressed: () async {
+                            final rated = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => RatingDialog(
+                                job: widget.job,
+                                onRated: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Provider rated successfully!')),
+                                  );
+                                },
+                              ),
+                            );
+                            if (rated == true) {
+                              setState(() => _hasRated = true);
+                              _showRebookPrompt();
+                            }
+                          },
                           icon: const Icon(Icons.star_rate),
                           label: const Text('Rate & Review Provider'),
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
@@ -604,18 +687,28 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
-                        onPressed: () => showDialog(
-                          context: context,
-                          builder: (context) => RatingDialog(
-                            jobId: widget.job.id,
-                            onRated: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Job marked as completed and provider rated!')),
-                              );
-                              Navigator.pop(context, true);
-                            },
-                          ),
-                        ),
+                        onPressed: () async {
+                          final rated = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => RatingDialog(
+                              job: widget.job,
+                              onRated: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Job marked as completed and provider rated!')),
+                                );
+                              },
+                            ),
+                          );
+                          if (rated == true) {
+                            if (mounted) {
+                              _showRebookPrompt();
+                              setState(() {
+                                _currentStatus = JobStatus.completed;
+                                _statusUpdated = true;
+                              });
+                            }
+                          }
+                        },
                         icon: const Icon(Icons.check_circle),
                         label: const Text('Mark as Completed'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
@@ -637,6 +730,20 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         label: const Text('Chat with Participant'),
                       ),
                     ),
+                if (_currentStatus != JobStatus.completed && _currentStatus != JobStatus.cancelled) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: _cancelJob,
+                      icon: const Icon(Icons.cancel, color: Colors.red),
+                      label: const Text('Cancel Job', style: TextStyle(color: Colors.red)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ],
           ),

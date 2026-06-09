@@ -2,12 +2,25 @@ import 'package:flutter/material.dart';
 import 'marketplace_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'models.dart';
 
 class CreateJobScreen extends StatefulWidget {
   final VoidCallback onJobCreated;
   final LatLng? initialLocation;
+  final String? parentJobId;
+  final String? initialCategory;
+  final String? initialTitle;
+  final String? initialDescription;
 
-  const CreateJobScreen({super.key, required this.onJobCreated, this.initialLocation});
+  const CreateJobScreen({
+    super.key, 
+    required this.onJobCreated, 
+    this.initialLocation,
+    this.parentJobId,
+    this.initialCategory,
+    this.initialTitle,
+    this.initialDescription,
+  });
 
   @override
   State<CreateJobScreen> createState() => _CreateJobScreenState();
@@ -17,25 +30,80 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _budgetController = TextEditingController();
+  final _occurrencesController = TextEditingController(text: '1');
+  
   String _category = 'Home Repair';
   String _subcategory = 'Plumbing';
   bool _isEmergency = false;
+  RecurrenceType _recurrence = RecurrenceType.once;
+  DateTime? _scheduledAt;
+  
   final _marketplaceService = MarketplaceService();
   bool _isLoading = false;
   Map<String, dynamic>? _insights;
 
   final Map<String, List<String>> _categories = {
-    'Home Repair': ['Plumbing', 'Electrical', 'Carpentry', 'Painting'],
-    'Personal Care': ['Barber', 'Massage', 'Manicure', 'Hair Styling'],
-    'Automotive': ['Oil Change', 'Tire Repair', 'Engine Check', 'Car Wash'],
-    'Cleaning': ['House Cleaning', 'Deep Clean', 'Office Cleaning'],
-    'Device Repair': ['Smartphone', 'Laptop', 'Tablet', 'Console'],
-    'Appliance Repair': ['Refrigerator', 'Washing Machine', 'Aircon', 'Oven'],
+    'Home Repair': [
+      'Plumbing',
+      'Electrical',
+      'Carpentry',
+      'Painting',
+      'Roofing',
+      'Tile Setting',
+      'Locksmith',
+      'Metal Fabrication',
+      'Upholstery',
+      'Masonry',
+      'Landscaping'
+    ],
+    'Personal Care': [
+      'Barber',
+      'Manicure/Pedicure',
+      'Hair Styling/Coloring/ Hair Care',
+      'Massage',
+      'Elderly Care',
+      'Child Care',
+      'Physical Therapy',
+      'Occupational Therapy',
+      'Tutorial Services',
+      'House Keeping',
+      'Dog/Cat Grooming',
+      'Laundry/Ironing'
+    ],
+    'Automotive': [
+      'Tire Repair',
+      'Tuning',
+      'Engine Check/Repair',
+      'Car wash',
+      'Detailing',
+      'Electrical Repair',
+      'Tinting',
+      'Body Repair/Painting'
+    ],
+    'Device Repair': ['Smartphone', 'Laptop', 'Tablet', 'Console', 'CCTV'],
+    'Appliance Repair': [
+      'Refrigerator',
+      'Washing Machine',
+      'HVAC',
+      'Stove/Oven',
+      'Television'
+    ],
   };
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialTitle != null) _titleController.text = widget.initialTitle!;
+    if (widget.initialDescription != null) _descController.text = widget.initialDescription!;
+    
+    if (widget.initialCategory != null) {
+      final parts = widget.initialCategory!.split(' > ');
+      if (parts.length == 2) {
+        _category = parts[0];
+        _subcategory = parts[1];
+      }
+    }
+    
     _fetchInsights();
   }
 
@@ -43,6 +111,26 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     final insights = await _marketplaceService.getInsights('$_category > $_subcategory');
     if (mounted) {
       setState(() => _insights = insights);
+    }
+  }
+
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 1)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      final TimeOfDay? time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+      if (time != null) {
+        setState(() {
+          _scheduledAt = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
+        });
+      }
     }
   }
 
@@ -74,6 +162,10 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       maxBudget: double.tryParse(_budgetController.text),
       isEmergency: _isEmergency,
       location: location,
+      recurrenceType: _recurrence,
+      totalOccurrences: int.tryParse(_occurrencesController.text) ?? 1,
+      parentJobId: widget.parentJobId,
+      scheduledAt: _scheduledAt,
     );
     setState(() => _isLoading = false);
 
@@ -97,11 +189,26 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Post a New Job')),
+      appBar: AppBar(title: Text(widget.parentJobId != null ? 'Rebook Service' : 'Post a New Job')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.parentJobId != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue)),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.blue),
+                    SizedBox(width: 12),
+                    Expanded(child: Text('Rebooking: Same provider and service will be prioritized.', style: TextStyle(fontSize: 12))),
+                  ],
+                ),
+              ),
             SwitchListTile(
               title: const Text('Emergency / Urgent Request'),
               subtitle: const Text('This will flag your job as a priority.'),
@@ -137,15 +244,35 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 _fetchInsights();
               },
             ),
-            if (_insights != null && _insights!['count'] > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  'Suggested Budget: ₱${_insights!['average'].toStringAsFixed(2)}',
-                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
             const SizedBox(height: 16),
+            const Text('Booking Type & Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<RecurrenceType>(
+              value: _recurrence,
+              decoration: const InputDecoration(labelText: 'Recurrence', border: OutlineInputBorder()),
+              items: RecurrenceType.values
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t.name.toUpperCase())))
+                  .toList(),
+              onChanged: (val) => setState(() => _recurrence = val!),
+            ),
+            if (_recurrence != RecurrenceType.once) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _occurrencesController,
+                decoration: const InputDecoration(labelText: 'Number of Occurrences (e.g. 15 days)', border: OutlineInputBorder()),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+            const SizedBox(height: 16),
+            ListTile(
+              title: const Text('Scheduled Start Time'),
+              subtitle: Text(_scheduledAt == null ? 'Immediate / As soon as possible' : _scheduledAt.toString()),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: _selectDate,
+              tileColor: Colors.grey.shade100,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            const SizedBox(height: 24),
             TextField(
               controller: _titleController,
               decoration: const InputDecoration(labelText: 'Job Title', border: OutlineInputBorder()),
@@ -159,18 +286,18 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _budgetController,
-              decoration: const InputDecoration(labelText: 'Max Budget (₱)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Budget per Session (₱)', border: OutlineInputBorder()),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 24),
             _isLoading
-                ? const CircularProgressIndicator()
+                ? const Center(child: CircularProgressIndicator())
                 : SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
                       onPressed: _submit,
-                      child: const Text('Post Job'),
+                      child: Text(widget.parentJobId != null ? 'Confirm Rebooking' : 'Post Job'),
                     ),
                   ),
           ],

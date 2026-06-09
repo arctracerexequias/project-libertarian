@@ -18,23 +18,24 @@ class MarketplaceService {
       });
       if (response.statusCode == 200) {
         final List jobsData = response.data['jobs'];
-        return jobsData.map((json) => Job(
-          id: json['id'],
-          title: json['title'],
-          description: json['description'],
-          category: json['category'],
-          status: _parseStatus(json['status']),
-          maxBudget: (json['max_budget'] as num?)?.toDouble(),
-          location: (json['lat'] != null && json['lng'] != null) 
-            ? LatLng(json['lat'], json['lng']) 
-            : null,
-          createdAt: DateTime.parse(json['created_at']),
-        )).toList();
+        return jobsData.map((json) => Job.fromJson(json)).toList();
       }
     } catch (e) {
       print('Get jobs error: $e');
     }
     return [];
+  }
+
+  Future<Job?> getJob(String jobId) async {
+    try {
+      final response = await _dio.get('/marketplace/jobs/$jobId');
+      if (response.statusCode == 200) {
+        return Job.fromJson(response.data);
+      }
+    } catch (e) {
+      print('Get job error: $e');
+    }
+    return null;
   }
 
   Future<List<Bid>> getBids(String jobId) async {
@@ -98,6 +99,32 @@ class MarketplaceService {
     return false;
   }
 
+  Future<bool> rejectBid(String jobId, String bidId, {String? reason}) async {
+    try {
+      final response = await _dio.post(
+        '/marketplace/jobs/$jobId/reject/$bidId',
+        data: {'reason': reason},
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Reject bid error: $e');
+    }
+    return false;
+  }
+
+  Future<bool> counterOffer(String bidId, double amount, {String? reason}) async {
+    try {
+      final response = await _dio.post(
+        '/marketplace/jobs/bids/$bidId/counter',
+        data: {'amount': amount, 'reason': reason},
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Counter bid error: $e');
+    }
+    return false;
+  }
+
   Future<bool> completeJob(String jobId, int score, String comment) async {
     try {
       final response = await _dio.post(
@@ -141,18 +168,7 @@ class MarketplaceService {
       final response = await _dio.get('/marketplace/jobs/provider/jobs');
       if (response.statusCode == 200) {
         final List jobsData = response.data['jobs'];
-        return jobsData.map((json) => Job(
-              id: json['id'],
-              title: json['title'],
-              description: json['description'],
-              category: json['category'],
-              status: _parseStatus(json['status']),
-              maxBudget: (json['max_budget'] as num?)?.toDouble(),
-              location: (json['lat'] != null && json['lng'] != null) 
-                ? LatLng(json['lat'], json['lng']) 
-                : null,
-              createdAt: DateTime.parse(json['created_at']),
-            )).toList();
+        return jobsData.map((json) => Job.fromJson(json)).toList();
       }
     } catch (e) {
       print('Get provider jobs error: $e');
@@ -167,6 +183,10 @@ class MarketplaceService {
     double? maxBudget,
     bool isEmergency = false,
     LatLng? location,
+    RecurrenceType recurrenceType = RecurrenceType.once,
+    int totalOccurrences = 1,
+    String? parentJobId,
+    DateTime? scheduledAt,
   }) async {
     try {
       final response = await _dio.post(
@@ -179,22 +199,16 @@ class MarketplaceService {
           'is_emergency': isEmergency,
           'lat': location?.latitude ?? 0.0,
           'lng': location?.longitude ?? 0.0,
+          'recurrence_type': recurrenceType.name.toUpperCase(),
+          'total_occurrences': totalOccurrences,
+          'parent_job_id': parentJobId,
+          'scheduled_at': scheduledAt?.toIso8601String(),
         },
       );
 
       if (response.statusCode == 201) {
         final json = response.data;
-        return Job(
-          id: json['id'],
-          title: title,
-          description: description,
-          category: category,
-          status: JobStatus.published,
-          maxBudget: maxBudget,
-          isEmergency: isEmergency,
-          location: location,
-          createdAt: DateTime.now(),
-        );
+        return Job.fromJson(json);
       } else {
         print('Create job failed with status: ${response.statusCode}, data: ${response.data}');
       }
@@ -231,16 +245,13 @@ class MarketplaceService {
     return false;
   }
 
-  JobStatus _parseStatus(String status) {
-    switch (status) {
-      case 'DRAFT': return JobStatus.draft;
-      case 'PUBLISHED': return JobStatus.published;
-      case 'BIDDING': return JobStatus.bidding;
-      case 'ACCEPTED': return JobStatus.accepted;
-      case 'EN_ROUTE': return JobStatus.enRoute;
-      case 'IN_PROGRESS': return JobStatus.inProgress;
-      case 'COMPLETED': return JobStatus.completed;
-      default: return JobStatus.draft;
+  Future<bool> cancelJob(String jobId) async {
+    try {
+      final response = await _dio.post('/marketplace/jobs/$jobId/cancel');
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Cancel job error: $e');
     }
+    return false;
   }
 }

@@ -146,6 +146,23 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final msg = _messages[_messages.length - 1 - index];
+                      if (msg.senderId == 'SYSTEM') {
+                        return Container(
+                          alignment: Alignment.center,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              msg.content == 'JOB_CANCELLED' ? '--- JOB CANCELLED ---' : msg.content,
+                              style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        );
+                      }
                       final isMe = msg.senderId == widget.userId;
                       return Align(
                         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,

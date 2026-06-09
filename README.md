@@ -1,6 +1,6 @@
 # Decentralized Service Marketplace Platform
 
-A production-grade microservices platform for multi-category service marketplaces (Home Repair, Personal Care, Automotive, etc.).
+A production-grade microservices platform for multi-category service marketplaces (Home Repair, Personal Care, Automotive, Device Repair, and Appliance Repair).
 
 ## 🚀 Quick Start (Backend)
 
