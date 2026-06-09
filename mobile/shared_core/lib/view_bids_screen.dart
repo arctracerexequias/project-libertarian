@@ -219,28 +219,30 @@ class _ViewBidsScreenState extends State<ViewBidsScreen> {
                             const SizedBox(height: 16),
                             Row(
                               children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: () => _rejectBid(bid.id),
-                                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                                    child: const Text('Decline'),
+                                if (bid.status != 'ACCEPTED')
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: () => _rejectBid(bid.id),
+                                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                                      child: const Text('Decline'),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
+                                if (bid.status != 'ACCEPTED') const SizedBox(width: 8),
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed: () => _counterBid(bid),
                                     style: OutlinedButton.styleFrom(foregroundColor: Colors.orange),
-                                    child: const Text('Counter'),
+                                    child: Text(bid.status == 'ACCEPTED' ? 'Renegotiate' : 'Counter'),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () => _acceptBid(bid.id),
-                                    child: const Text('Accept'),
+                                if (bid.status != 'ACCEPTED')
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () => _acceptBid(bid.id),
+                                      child: const Text('Accept'),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ],

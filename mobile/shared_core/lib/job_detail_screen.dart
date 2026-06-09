@@ -584,7 +584,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
                 // Customers Options
                 if (!isProvider) ...[
-                  if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding)
+                  if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding || _currentStatus == JobStatus.accepted)
                     SizedBox(
                       width: double.infinity,
                       height: 50,
