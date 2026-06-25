@@ -6,6 +6,7 @@ import 'auth_service.dart';
 import 'config.dart';
 import 'models.dart';
 import 'network_service.dart';
+import 'marketplace_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String jobId;
@@ -20,7 +21,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   WebSocketChannel? _channel;
-  final List<ChatMessage> _messages = [];
+  final List<dynamic> _items = []; // Can be ChatMessage, Bid, or Map (for counter offers)
   bool _isOtherUserTyping = false;
   DateTime? _lastTypingTime;
   bool _isLoading = true;
@@ -41,13 +42,36 @@ class _ChatScreenState extends State<ChatScreen> {
         final List historyData = response.data;
         if (mounted) {
           setState(() {
-            _messages.clear();
-            _messages.addAll(historyData.map((json) => ChatMessage.fromJson(json)));
+            _items.clear();
+            _items.addAll(historyData.map((json) => ChatMessage.fromJson(json)));
           });
         }
       }
     } catch (e) {
       print('Failed to load chat history: $e');
+    }
+
+    try {
+      final bids = await MarketplaceService().getBids(widget.jobId);
+      if (mounted) {
+        setState(() {
+          for (var bid in bids) {
+            _items.add(bid);
+            if (bid.counterAmount > 0) {
+              _items.add({
+                'type': 'counter_offer',
+                'amount': bid.counterAmount,
+                'counterBy': bid.counterBy,
+                'originalBidAmount': bid.amount,
+                'timestamp': bid.createdAt.add(const Duration(seconds: 1)),
+              });
+            }
+          }
+          _sortItems();
+        });
+      }
+    } catch (e) {
+      print('Failed to load bids for chat: $e');
     }
 
     // Connect WebSocket — uses the dedicated ws/wss base URL from AppConfig
@@ -77,7 +101,8 @@ class _ChatScreenState extends State<ChatScreen> {
         final msg = ChatMessage.fromJson(json);
         if (msg.jobId == widget.jobId) {
           setState(() {
-            _messages.add(msg);
+            _items.add(msg);
+            _sortItems();
             _isOtherUserTyping = false;
           });
         }
@@ -129,6 +154,14 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  void _sortItems() {
+    _items.sort((a, b) {
+      DateTime timeA = a is ChatMessage ? a.timestamp : (a is Bid ? a.createdAt : a['timestamp']);
+      DateTime timeB = b is ChatMessage ? b.timestamp : (b is Bid ? b.createdAt : b['timestamp']);
+      return timeB.compareTo(timeA); // descending
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -140,9 +173,87 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: ListView.builder(
                     reverse: true,
-                    itemCount: _messages.length,
+                    itemCount: _items.length,
                     itemBuilder: (context, index) {
-                      final msg = _messages[_messages.length - 1 - index];
+                      final item = _items[index];
+                      
+                      if (item is Map && item['type'] == 'counter_offer') {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            border: Border.all(color: Colors.orange.shade200),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.handshake, color: Colors.orange, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Counter Offer by ${item['counterBy']}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text('Original Bid: ₱${item['originalBidAmount']}'),
+                              Text(
+                                'New Offer: ₱${item['amount']}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      if (item is Bid) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            border: Border.all(color: Colors.blue.shade200),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.local_offer, color: Colors.blue, size: 20),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Bid Placed',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    item.status.toUpperCase(),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: item.status == 'accepted' ? Colors.green : Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text('Amount: ₱${item.amount}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              if (item.estimatedTime.isNotEmpty) Text('Estimated Time: ${item.estimatedTime}'),
+                              if (item.message.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text('"${item.message}"', style: const TextStyle(fontStyle: FontStyle.italic)),
+                              ],
+                            ],
+                          ),
+                        );
+                      }
+
+                      final msg = item as ChatMessage;
                       if (msg.senderId == 'SYSTEM') {
                         return Container(
                           alignment: Alignment.center,
