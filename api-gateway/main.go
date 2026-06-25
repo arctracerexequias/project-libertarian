@@ -16,9 +16,12 @@ var jwtKey = []byte(os.Getenv("JWT_SECRET"))
 
 func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Public routes that don't need auth
+		// Public routes that don't need JWT auth
 		path := c.Request.URL.Path
-		if strings.Contains(path, "/auth/login") || strings.Contains(path, "/auth/register") || path == "/health" {
+		if strings.Contains(path, "/auth/login") ||
+			strings.Contains(path, "/auth/register") ||
+			path == "/health" ||
+			strings.HasPrefix(path, "/api/v1/admin") { // Admin has its own Basic Auth
 			c.Next()
 			return
 		}
@@ -50,8 +53,13 @@ func authMiddleware() gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			userID := claims["sub"].(string)
-			c.Request.Header.Set("X-User-Id", userID)
+			if userID, ok := claims["sub"].(string); ok && userID != "" {
+				c.Request.Header.Set("X-User-Id", userID)
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token subject"})
+				c.Abort()
+				return
+			}
 		}
 
 		c.Next()

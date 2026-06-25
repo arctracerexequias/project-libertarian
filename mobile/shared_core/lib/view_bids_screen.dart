@@ -27,7 +27,7 @@ class _ViewBidsScreenState extends State<ViewBidsScreen> {
     setState(() => _isLoading = true);
     final bids = await _marketplaceService.getBids(widget.jobId);
     setState(() {
-      _bids = bids;
+      _bids = bids.where((b) => b.status != 'REJECTED').toList();
       _isLoading = false;
     });
   }

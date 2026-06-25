@@ -50,11 +50,8 @@ class _ChatScreenState extends State<ChatScreen> {
       print('Failed to load chat history: $e');
     }
 
-    // Connect WebSocket dynamically
-    final wsBase = AppConfig.baseUrl
-        .replaceAll('https://', 'wss://')
-        .replaceAll('http://', 'ws://');
-    final wsUrl = '$wsBase/communication/chat/ws?jobId=${widget.jobId}&token=${token ?? ""}';
+    // Connect WebSocket — uses the dedicated ws/wss base URL from AppConfig
+    final wsUrl = '${AppConfig.wsBaseUrl}/communication/chat/ws?jobId=${widget.jobId}&token=${token ?? ""}';
 
     try {
       final channel = WebSocketChannel.connect(Uri.parse(wsUrl));

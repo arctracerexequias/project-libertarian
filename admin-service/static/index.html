@@ -3,103 +3,411 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Platform Admin Dashboard</title>
+    <title>Libertarian Marketplace — Admin</title>
+    <meta name="description" content="Real-time platform administration dashboard for the Libertarian Service Marketplace.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
-        body { font-family: sans-serif; margin: 40px; background: #f4f4f9; }
-        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 20px; }
-        .stat-card { background: #eee; padding: 20px; border-radius: 8px; text-align: center; }
-        .stat-value { font-size: 24px; font-weight: bold; color: #4f46e5; }
-        .stat-label { color: #666; margin-top: 5px; }
-        #map { height: 400px; margin-top: 30px; border-radius: 8px; }
-        .kyc-box { background: #eef2ff; padding: 15px; border-radius: 8px; margin-top: 20px; border-left: 4px solid #4f46e5; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0b0f1a;
+            --surface:   #111827;
+            --surface2:  #1a2235;
+            --border:    rgba(255,255,255,0.07);
+            --accent:    #6366f1;
+            --accent2:   #8b5cf6;
+            --green:     #10b981;
+            --yellow:    #f59e0b;
+            --red:       #ef4444;
+            --text:      #f1f5f9;
+            --muted:     #94a3b8;
+            --glow:      rgba(99,102,241,0.15);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 32px;
+            background: rgba(17,24,39,0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .refresh-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--muted);
+            background: var(--surface2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+        .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+        /* ── Main Layout ── */
+        main { max-width: 1280px; margin: 0 auto; padding: 32px 24px; }
+
+        h2 {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 16px;
+        }
+
+        /* ── Stats Grid ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 22px 24px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            border-radius: 14px 14px 0 0;
+        }
+        .stat-card.indigo::before  { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+        .stat-card.green::before   { background: linear-gradient(90deg, var(--green), #34d399); }
+        .stat-card.yellow::before  { background: linear-gradient(90deg, var(--yellow), #fcd34d); }
+        .stat-card.purple::before  { background: linear-gradient(90deg, var(--accent2), #a78bfa); }
+        .stat-card.teal::before    { background: linear-gradient(90deg, #14b8a6, #2dd4bf); }
+        .stat-card.rose::before    { background: linear-gradient(90deg, var(--red), #fb7185); }
+
+        .stat-icon {
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -1px;
+        }
+        .stat-label {
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+        .stat-sub {
+            font-size: 0.7rem;
+            color: var(--green);
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ── KYC Bar ── */
+        .kyc-bar {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+        }
+        .kyc-bar .label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+        .kyc-item { display: flex; align-items: center; gap: 8px; }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge.green { background: rgba(16,185,129,0.15); color: var(--green); }
+        .badge.yellow { background: rgba(245,158,11,0.15); color: var(--yellow); }
+
+        /* ── Map ── */
+        .map-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 32px;
+        }
+        .map-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .map-title { font-size: 0.85rem; font-weight: 600; }
+        .map-note { font-size: 0.72rem; color: var(--muted); }
+        #map { height: 360px; }
+
+        /* Override Leaflet for dark mode */
+        .leaflet-tile { filter: invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+        .leaflet-container { background: #0b0f1a; }
+
+        /* ── Error State ── */
+        #error-banner {
+            display: none;
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.3);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+            font-size: 0.82rem;
+            color: #fca5a5;
+        }
+
+        /* ── Skeleton ── */
+        .skeleton {
+            background: linear-gradient(90deg, var(--surface2) 25%, var(--surface) 50%, var(--surface2) 75%);
+            background-size: 400% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 6px;
+            height: 2rem;
+            width: 80%;
+        }
+        @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+
+        /* ── Last Updated ── */
+        #last-updated { font-size: 0.7rem; color: var(--muted); }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Platform Overview</h1>
-        <div id="loading">Loading stats...</div>
-        <div class="stats-grid" id="stats" style="display: none;">
-            <div class="stat-card">
-                <div class="stat-value" id="totalUsers">-</div>
-                <div class="stat-label">Total Users</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="totalProviders">-</div>
-                <div class="stat-label">Total Providers</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="activeJobs">-</div>
-                <div class="stat-label">Active Jobs</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="totalRevenue">-</div>
-                <div class="stat-label">Total Revenue</div>
-            </div>
-        </div>
 
-        <div class="kyc-box" id="kycStats" style="display: none;">
-            <strong>Trust & Safety (KYC):</strong> 
-            <span id="verifiedCount">0</span> Verified Providers | 
-            <span id="unverifiedCount">0</span> Pending Verification
+<header>
+    <div class="logo">
+        <div class="logo-dot"></div>
+        Libertarian Admin
+    </div>
+    <div class="header-right">
+        <div class="refresh-badge">
+            <div class="pulse"></div>
+            Live · <span id="last-updated">loading…</span>
         </div>
+    </div>
+</header>
 
-        <h2 style="margin-top: 40px;">Live Provider Tracking</h2>
-        <div id="map"></div>
+<main>
+    <div id="error-banner" role="alert"></div>
+
+    <h2>Platform Overview</h2>
+    <div class="stats-grid">
+        <div class="stat-card indigo">
+            <span class="stat-icon">👥</span>
+            <div class="stat-value" id="stat-users"><div class="skeleton"></div></div>
+            <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-card purple">
+            <span class="stat-icon">🔧</span>
+            <div class="stat-value" id="stat-providers"><div class="skeleton"></div></div>
+            <div class="stat-label">Total Providers</div>
+        </div>
+        <div class="stat-card green">
+            <span class="stat-icon">✅</span>
+            <div class="stat-value" id="stat-verified"><div class="skeleton"></div></div>
+            <div class="stat-label">Verified Providers</div>
+        </div>
+        <div class="stat-card yellow">
+            <span class="stat-icon">⏳</span>
+            <div class="stat-value" id="stat-unverified"><div class="skeleton"></div></div>
+            <div class="stat-label">Pending Verification</div>
+        </div>
+        <div class="stat-card teal">
+            <span class="stat-icon">📋</span>
+            <div class="stat-value" id="stat-jobs"><div class="skeleton"></div></div>
+            <div class="stat-label">Active Jobs</div>
+        </div>
+        <div class="stat-card rose">
+            <span class="stat-icon">💰</span>
+            <div class="stat-value" id="stat-revenue"><div class="skeleton"></div></div>
+            <div class="stat-label">Committed Revenue</div>
+            <div class="stat-sub">∑ accepted bids</div>
+        </div>
     </div>
 
-    <script>
-        // Initialize Map
-        var map = L.map('map').setView([0, 0], 2);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        }).addTo(map);
+    <div class="kyc-bar">
+        <span class="label">🛡️ Trust &amp; Safety</span>
+        <div class="kyc-item">
+            <span class="badge green">✓ Verified: <span id="kyc-verified">–</span></span>
+        </div>
+        <div class="kyc-item">
+            <span class="badge yellow">⏳ Pending: <span id="kyc-pending">–</span></span>
+        </div>
+    </div>
 
-        var markers = {};
+    <div class="map-card">
+        <div class="map-header">
+            <span class="map-title">🗺 Live Provider Locations</span>
+            <span class="map-note">Updates every 30 seconds · Showing active providers</span>
+        </div>
+        <div id="map"></div>
+    </div>
+</main>
 
-        // Fetch Stats
-        fetch('/api/v1/admin/api/stats')
-            .then(response => response.json())
+<script>
+    // ── Map Init ──────────────────────────────────────────────────────
+    const map = L.map('map').setView([14.5995, 120.9842], 12); // Metro Manila default
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    const providerMarkers = {};
+
+    const providerIcon = L.divIcon({
+        className: '',
+        html: `<div style="
+            width:32px;height:32px;border-radius:50%;
+            background:linear-gradient(135deg,#6366f1,#8b5cf6);
+            border:2px solid rgba(255,255,255,0.3);
+            display:flex;align-items:center;justify-content:center;
+            font-size:14px;box-shadow:0 0 12px rgba(99,102,241,0.5);">🔧</div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+    });
+
+    // ── Helpers ───────────────────────────────────────────────────────
+    function showError(msg) {
+        const b = document.getElementById('error-banner');
+        b.textContent = '⚠ ' + msg;
+        b.style.display = 'block';
+        setTimeout(() => { b.style.display = 'none'; }, 8000);
+    }
+
+    function setVal(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = val;
+    }
+
+    function formatCurrency(n) {
+        return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0 });
+    }
+
+    function updateTimestamp() {
+        const now = new Date();
+        document.getElementById('last-updated').textContent =
+            now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    // ── Stats Fetch ───────────────────────────────────────────────────
+    function fetchStats() {
+        fetch('/api/stats', { credentials: 'include' })
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
-                document.getElementById('totalUsers').innerText = data.total_users;
-                document.getElementById('totalProviders').innerText = data.total_providers;
-                document.getElementById('activeJobs').innerText = data.active_jobs;
-                document.getElementById('totalRevenue').innerText = '$' + data.total_revenue.toLocaleString();
-                
-                document.getElementById('verifiedCount').innerText = data.verified_providers;
-                document.getElementById('unverifiedCount').innerText = data.unverified_providers;
+                setVal('stat-users',      data.total_users     ?? '–');
+                setVal('stat-providers',  data.total_providers ?? '–');
+                setVal('stat-verified',   data.verified_providers   ?? '–');
+                setVal('stat-unverified', data.unverified_providers ?? '–');
+                setVal('stat-jobs',       data.active_jobs     ?? '–');
+                setVal('stat-revenue',    formatCurrency(data.total_revenue ?? 0));
+                setVal('kyc-verified',    data.verified_providers   ?? '–');
+                setVal('kyc-pending',     data.unverified_providers ?? '–');
+                updateTimestamp();
+            })
+            .catch(err => showError('Failed to load stats: ' + err.message));
+    }
 
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('stats').style.display = 'grid';
-                document.getElementById('kycStats').style.display = 'block';
+    // ── Provider Location Polling ─────────────────────────────────────
+    // We call POST /api/v1/dispatch/partners with Manila coords to get
+    // currently broadcasting providers visible within a large radius.
+    function pollProviderLocations() {
+        fetch('/api/v1/dispatch/partners', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat: 14.5995, lng: 120.9842, category: '' })
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data || !data.partners) return;
+            const seen = new Set();
+            data.partners.forEach(p => {
+                if (!p.provider_id || !p.lat || !p.lng) return;
+                seen.add(p.provider_id);
+                const pos = [p.lat, p.lng];
+                if (providerMarkers[p.provider_id]) {
+                    providerMarkers[p.provider_id].setLatLng(pos);
+                } else {
+                    providerMarkers[p.provider_id] = L.marker(pos, { icon: providerIcon })
+                        .addTo(map)
+                        .bindPopup(`<strong>Provider</strong><br/>${p.provider_id.slice(0, 8)}…`);
+                }
             });
+            // Remove stale markers
+            Object.keys(providerMarkers).forEach(id => {
+                if (!seen.has(id)) {
+                    map.removeLayer(providerMarkers[id]);
+                    delete providerMarkers[id];
+                }
+            });
+        })
+        .catch(() => {}); // Map polling failure is non-critical
+    }
 
-        // Mock Live Polling for Admin View
-        function pollLocations() {
-            const mockProviderId = 'proto-provider-id';
-            fetch('/api/v1/dispatch/location/' + mockProviderId)
-                .then(res => res.json())
-                .then(loc => {
-                    if (loc.lat && loc.lng) {
-                        const pos = [loc.lat, loc.lng];
-                        if (markers[mockProviderId]) {
-                            markers[mockProviderId].setLatLng(pos);
-                        } else {
-                            markers[mockProviderId] = L.marker(pos).addTo(map)
-                                .bindPopup('Provider: ' + mockProviderId).openPopup();
-                            map.setView(pos, 13);
-                        }
-                    }
-                })
-                .catch(err => console.log('No location data for proto-provider yet'));
-        }
+    // ── Bootstrap ─────────────────────────────────────────────────────
+    fetchStats();
+    pollProviderLocations();
 
-        setInterval(pollLocations, 5000);
-        pollLocations();
-    </script>
+    // Auto-refresh every 30 seconds
+    setInterval(fetchStats, 30000);
+    setInterval(pollProviderLocations, 30000);
+</script>
 </body>
 </html>

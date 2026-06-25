@@ -1,11 +1,14 @@
 package http
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"github.com/service-marketplace/communication-service/internal/domain"
 	"github.com/service-marketplace/shared-contracts/pkg/middleware"
@@ -67,11 +70,43 @@ func (h *ChatHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
+	// Primary: read userID injected by the API Gateway via X-User-Id header
 	userID := middleware.GetUserID(c)
+
+	// Fallback: browser WebSocket connections cannot set custom headers,
+	// so validate the JWT from the ?token= query parameter directly.
 	if userID == "" {
-		// Note: In a real app, you'd validate the token here since WS initial request might not have headers
-		// For prototype, we expect the Gateway to have passed it.
-		// If using browser JS WebSocket, you might need to pass token in query and validate here.
+		tokenStr := c.Query("token")
+		if tokenStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: missing token"})
+			return
+		}
+
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			jwtSecret = "super_secret_jwt_key_for_development"
+		}
+
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return []byte(jwtSecret), nil
+		})
+		if err != nil || !token.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: invalid token"})
+			return
+		}
+
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if sub, ok := claims["sub"].(string); ok {
+				userID = sub
+			}
+		}
+		if userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: invalid token claims"})
+			return
+		}
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)

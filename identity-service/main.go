@@ -43,6 +43,13 @@ func main() {
 		auth.GET("/profile", authHandler.GetProfile)
 		auth.PUT("/profile", authHandler.UpdateProfile)
 		auth.POST("/verify-me", authHandler.VerifyMe)
+
+		boost := auth.Group("/boost")
+		{
+			boost.POST("/coverage", authHandler.PurchaseCoverageBoost)
+			boost.POST("/roam", authHandler.PurchaseRoamBoost)
+			boost.POST("/coverage/toggle", authHandler.ToggleCoverageBoost)
+		}
 	}
 
 	port := os.Getenv("PORT")

@@ -1,10 +1,9 @@
 package http
 
 import (
-	"log"
 	"net/http"
-
 	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/service-marketplace/marketplace-service/internal/domain"
 	"github.com/service-marketplace/shared-contracts/pkg/middleware"
@@ -20,9 +19,30 @@ func NewMarketplaceHandler(service domain.MarketplaceService) *MarketplaceHandle
 
 func (h *MarketplaceHandler) GetJobs(c *gin.Context) {
 	category := c.Query("category")
-	lat, _ := strconv.ParseFloat(c.DefaultQuery("lat", "0"), 64)
-	lng, _ := strconv.ParseFloat(c.DefaultQuery("lng", "0"), 64)
-	radius, _ := strconv.ParseFloat(c.DefaultQuery("radius", "0"), 64)
+
+	var lat, lng, radius float64
+	var err error
+	if v := c.Query("lat"); v != "" {
+		if lat, err = strconv.ParseFloat(v, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid lat parameter"})
+			return
+		}
+	}
+	if v := c.Query("lng"); v != "" {
+		if lng, err = strconv.ParseFloat(v, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid lng parameter"})
+			return
+		}
+	}
+	if v := c.Query("radius"); v != "" {
+		if radius, err = strconv.ParseFloat(v, 64); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid radius parameter"})
+			return
+		}
+		if radius > 100000 { // Cap at 100km
+			radius = 100000
+		}
+	}
 
 	jobs, err := h.service.ListJobs(c.Request.Context(), category, lat, lng, radius)
 	if err != nil {
@@ -57,7 +77,6 @@ func (h *MarketplaceHandler) PostJob(c *gin.Context) {
 
 	job, err := h.service.PostJob(c.Request.Context(), userID, req)
 	if err != nil {
-		log.Printf("[POST JOB ERROR] %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create job"})
 		return
 	}
@@ -97,6 +116,12 @@ func (h *MarketplaceHandler) GetBids(c *gin.Context) {
 }
 
 func (h *MarketplaceHandler) AcceptBid(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	jobID := c.Param("id")
 	bidID := c.Param("bidId")
 	err := h.service.AcceptOffer(c.Request.Context(), jobID, bidID)
@@ -108,6 +133,12 @@ func (h *MarketplaceHandler) AcceptBid(c *gin.Context) {
 }
 
 func (h *MarketplaceHandler) RejectBid(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	jobID := c.Param("id")
 	bidID := c.Param("bidId")
 	var req struct {
@@ -191,6 +222,12 @@ func (h *MarketplaceHandler) GetInsights(c *gin.Context) {
 }
 
 func (h *MarketplaceHandler) UpdateJobStatus(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	jobID := c.Param("id")
 	var req struct {
 		Status string `json:"status" binding:"required"`

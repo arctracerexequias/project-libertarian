@@ -9,6 +9,7 @@ import (
 	"github.com/service-marketplace/payment-service/internal/domain"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/paymentintent"
+	"github.com/stripe/stripe-go/v72/refund"
 )
 
 type paymentService struct {
@@ -22,11 +23,12 @@ func NewPaymentService(repo domain.PaymentRepository) domain.PaymentService {
 
 func (s *paymentService) InitializeEscrow(ctx context.Context, jobID string, amount float64) (string, string, error) {
 	params := &stripe.PaymentIntentParams{
-		Amount:   stripe.Int64(int64(amount * 100)),
-		Currency: stripe.String(string(stripe.CurrencyUSD)),
+		Amount:        stripe.Int64(int64(amount * 100)),
+		Currency:      stripe.String(string(stripe.CurrencyUSD)),
+		CaptureMethod: stripe.String(string(stripe.PaymentIntentCaptureMethodManual)),
 	}
 	params.AddMetadata("job_id", jobID)
-	
+
 	pi, err := paymentintent.New(params)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create stripe payment intent: %w", err)
@@ -48,8 +50,17 @@ func (s *paymentService) InitializeEscrow(ctx context.Context, jobID string, amo
 }
 
 func (s *paymentService) ReleaseEscrow(ctx context.Context, jobID string) error {
-	// In a real implementation, you would trigger the Stripe transfer here
-	// For this prototype, we'll just update the database status
+	tx, err := s.repo.GetTransactionByJobID(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve transaction: %w", err)
+	}
+
+	// Capture the authorized amount
+	_, err = paymentintent.Capture(tx.StripeIntentID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to capture payment intent: %w", err)
+	}
+
 	return s.repo.UpdateTransactionStatus(ctx, jobID, "RELEASED")
 }
 
@@ -64,6 +75,26 @@ func (s *paymentService) ProcessDailyCommissions(ctx context.Context) error {
 }
 
 func (s *paymentService) RefundEscrow(ctx context.Context, jobID string) error {
-	// In a real implementation, you would trigger the Stripe refund here
+	tx, err := s.repo.GetTransactionByJobID(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve transaction: %w", err)
+	}
+
+	// Since we use manual capture, if the status is still HELD, we just cancel the intent
+	if tx.Status == "HELD" {
+		_, err = paymentintent.Cancel(tx.StripeIntentID, nil)
+		if err != nil {
+			return fmt.Errorf("failed to cancel payment intent: %w", err)
+		}
+	} else if tx.Status == "RELEASED" {
+		// If it was already captured, we need to issue a refund
+		_, err = refund.New(&stripe.RefundParams{
+			PaymentIntent: stripe.String(tx.StripeIntentID),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to refund payment intent: %w", err)
+		}
+	}
+
 	return s.repo.UpdateTransactionStatus(ctx, jobID, "REFUNDED")
 }

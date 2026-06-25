@@ -77,6 +77,7 @@ services:
       dockerfile: communication-service/Dockerfile
     environment:
       DATABASE_URL: postgres://user:password@db:5432/marketplace
+      JWT_SECRET: super_secret_jwt_key_for_development
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -98,8 +99,14 @@ services:
 
   admin-service:
     build: ./admin-service
+    environment:
+      DATABASE_URL: postgres://user:password@db:5432/marketplace
+      ADMIN_PASSWORD: admin_dev_password
     ports:
       - "8085:8085"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
     networks:
       - marketplace-network
 

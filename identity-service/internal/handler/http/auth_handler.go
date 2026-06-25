@@ -105,3 +105,72 @@ func (h *AuthHandler) VerifyMe(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "User verified successfully"})
 }
+
+func (h *AuthHandler) PurchaseCoverageBoost(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req domain.BoostPurchaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.PurchaseCoverageBoost(c.Request.Context(), userID, req.DurationDays); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to purchase coverage boost"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Coverage boost activated", "duration_days": req.DurationDays})
+}
+
+func (h *AuthHandler) PurchaseRoamBoost(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req domain.BoostPurchaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.PurchaseRoamBoost(c.Request.Context(), userID, req.DurationDays); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to purchase roam boost"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Roam boost activated", "duration_days": req.DurationDays})
+}
+
+func (h *AuthHandler) ToggleCoverageBoost(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req struct {
+		Active bool `json:"active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.ToggleCoverageBoost(c.Request.Context(), userID, req.Active); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to toggle coverage boost"})
+		return
+	}
+
+	status := "deactivated"
+	if req.Active {
+		status = "activated"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Coverage boost " + status})
+}

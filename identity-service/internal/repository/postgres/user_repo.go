@@ -179,3 +179,42 @@ func (r *userRepo) Update(ctx context.Context, user *domain.User) error {
 
 	return tx.Commit(ctx)
 }
+
+func (r *userRepo) SetCoverageBoost(ctx context.Context, userID string, durationDays int) error {
+	_, err := r.db.Exec(ctx,
+		"UPDATE providers SET coverage_boost_expires_at = NOW() + ($1 * INTERVAL '1 day') WHERE user_id = $2",
+		durationDays, userID)
+	if err != nil {
+		return fmt.Errorf("failed to set coverage boost: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepo) SetRoamBoost(ctx context.Context, userID string, durationDays int) error {
+	_, err := r.db.Exec(ctx,
+		"UPDATE providers SET roam_boost_expires_at = NOW() + ($1 * INTERVAL '1 day') WHERE user_id = $2",
+		durationDays, userID)
+	if err != nil {
+		return fmt.Errorf("failed to set roam boost: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepo) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
+	var err error
+	if active {
+		// Re-activate: set to 1 day from now as a default resume
+		_, err = r.db.Exec(ctx,
+			"UPDATE providers SET coverage_boost_expires_at = NOW() + INTERVAL '1 day' WHERE user_id = $1 AND coverage_boost_expires_at IS NOT NULL",
+			userID)
+	} else {
+		// Deactivate: nullify the expiry
+		_, err = r.db.Exec(ctx,
+			"UPDATE providers SET coverage_boost_expires_at = NULL WHERE user_id = $1",
+			userID)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to toggle coverage boost: %w", err)
+	}
+	return nil
+}

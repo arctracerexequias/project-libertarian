@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/service-marketplace/dispatch-service/internal/domain"
+	"github.com/service-marketplace/shared-contracts/pkg/middleware"
 )
 
 type DispatchHandler struct {
@@ -16,6 +17,13 @@ func NewDispatchHandler(service domain.DispatchService) *DispatchHandler {
 }
 
 func (h *DispatchHandler) UpdateLocation(c *gin.Context) {
+	// Enforce: only the authenticated provider can update their own location
+	authenticatedUserID := middleware.GetUserID(c)
+	if authenticatedUserID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var req struct {
 		ProviderID string  `json:"provider_id" binding:"required"`
 		Lat        float64 `json:"lat" binding:"required"`
@@ -23,6 +31,11 @@ func (h *DispatchHandler) UpdateLocation(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if authenticatedUserID != req.ProviderID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot update location for another provider"})
 		return
 	}
 
@@ -39,6 +52,11 @@ func (h *DispatchHandler) Dispatch(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Cap search radius at 50km to prevent excessive DB load
+	if req.Radius > 50000 {
+		req.Radius = 50000
 	}
 
 	locations, err := h.service.DispatchJob(c.Request.Context(), req)

@@ -5,6 +5,8 @@ allprojects {
     }
 }
 
+// Reverted subprojects block
+
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"

@@ -133,7 +133,7 @@ func (r *marketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID string) er
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, "UPDATE bids SET status = 'ACCEPTED' WHERE id = $1", bidID)
+	_, err = tx.Exec(ctx, "UPDATE bids SET amount = CASE WHEN status = 'COUNTERED' THEN counter_amount ELSE amount END, status = 'ACCEPTED' WHERE id = $1", bidID)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func (r *marketplaceRepo) RejectBid(ctx context.Context, jobID, bidID string, re
 }
 
 func (r *marketplaceRepo) CounterBid(ctx context.Context, bidID string, userID string, amount float64, reason string) error {
-	_, err := r.db.Exec(ctx, "UPDATE bids SET status = 'COUNTERED', counter_amount = $1, counter_by = $2, message = CASE WHEN $3 != '' THEN $3 ELSE message END WHERE id = $4", amount, userID, reason, bidID)
+	_, err := r.db.Exec(ctx, "UPDATE bids SET amount = CASE WHEN status = 'COUNTERED' THEN counter_amount ELSE amount END, status = 'COUNTERED', counter_amount = $1, counter_by = $2, message = CASE WHEN $3 != '' THEN $3 ELSE message END WHERE id = $4", amount, userID, reason, bidID)
 	return err
 }
 
@@ -174,7 +174,14 @@ func (r *marketplaceRepo) CompleteJob(ctx context.Context, jobID, userID string,
 }
 
 func (r *marketplaceRepo) GetBidsByProviderID(ctx context.Context, providerID string) ([]domain.Bid, error) {
-	rows, err := r.db.Query(ctx, "SELECT id, job_id, provider_id, amount, estimated_time, message, status, created_at FROM bids WHERE provider_id = $1", providerID)
+	rows, err := r.db.Query(ctx, `
+		SELECT id, job_id, provider_id, amount, estimated_time, message, status, created_at,
+		       COALESCE(decline_reason, '') as decline_reason,
+		       COALESCE(counter_amount, 0.0) as counter_amount,
+		       COALESCE(counter_by::text, '') as counter_by
+		FROM bids 
+		WHERE provider_id = $1
+	`, providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -182,8 +189,14 @@ func (r *marketplaceRepo) GetBidsByProviderID(ctx context.Context, providerID st
 	var bids []domain.Bid
 	for rows.Next() {
 		var b domain.Bid
-		rows.Scan(&b.ID, &b.JobID, &b.ProviderID, &b.Amount, &b.EstimatedTime, &b.Message, &b.Status, &b.CreatedAt)
+		err := rows.Scan(&b.ID, &b.JobID, &b.ProviderID, &b.Amount, &b.EstimatedTime, &b.Message, &b.Status, &b.CreatedAt, &b.DeclineReason, &b.CounterAmount, &b.CounterBy)
+		if err != nil {
+			return nil, err
+		}
 		bids = append(bids, b)
+	}
+	if bids == nil {
+		bids = []domain.Bid{}
 	}
 	return bids, nil
 }

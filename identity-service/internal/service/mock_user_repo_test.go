@@ -46,3 +46,15 @@ func (m *mockUserRepo) Update(ctx context.Context, user *domain.User) error {
 	}
 	return context.DeadlineExceeded
 }
+
+func (m *mockUserRepo) SetCoverageBoost(ctx context.Context, userID string, durationDays int) error {
+	return nil
+}
+
+func (m *mockUserRepo) SetRoamBoost(ctx context.Context, userID string, durationDays int) error {
+	return nil
+}
+
+func (m *mockUserRepo) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
+	return nil
+}

@@ -45,6 +45,13 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 	Update(ctx context.Context, user *User) error
+	SetCoverageBoost(ctx context.Context, userID string, durationDays int) error
+	SetRoamBoost(ctx context.Context, userID string, durationDays int) error
+	ToggleCoverageBoost(ctx context.Context, userID string, active bool) error
+}
+
+type BoostPurchaseRequest struct {
+	DurationDays int `json:"duration_days" binding:"required"`
 }
 
 type AuthService interface {
@@ -53,4 +60,7 @@ type AuthService interface {
 	GetProfile(ctx context.Context, userID string) (*User, error)
 	UpdateProfile(ctx context.Context, userID string, fullName string, bio string, skills []string) error
 	VerifyUser(ctx context.Context, userID string, isVerified bool) error
+	PurchaseCoverageBoost(ctx context.Context, userID string, durationDays int) error
+	PurchaseRoamBoost(ctx context.Context, userID string, durationDays int) error
+	ToggleCoverageBoost(ctx context.Context, userID string, active bool) error
 }

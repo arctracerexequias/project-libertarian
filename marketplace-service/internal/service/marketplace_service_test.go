@@ -19,13 +19,13 @@ func TestMarketplaceService_PostJob(t *testing.T) {
 		IsEmergency: true,
 	}
 
-	jobID, err := svc.PostJob(context.Background(), "user-123", req)
+	job, err := svc.PostJob(context.Background(), "user-123", req)
 	if err != nil {
 		t.Fatalf("Failed to post job: %v", err)
 	}
 
-	if jobID == "" {
-		t.Fatal("Expected non-empty job ID")
+	if job == nil || job.ID == "" {
+		t.Fatal("Expected non-nil job with a valid ID")
 	}
 
 	jobs, _ := repo.GetJobs(context.Background(), "", 0, 0, 0)

@@ -22,6 +22,15 @@ func (m *mockMarketplaceRepo) GetJobs(ctx context.Context, category string, lat,
 	return m.jobs, nil
 }
 
+func (m *mockMarketplaceRepo) GetJobByID(ctx context.Context, id string) (*domain.Job, error) {
+	for _, j := range m.jobs {
+		if j.ID == id {
+			return &j, nil
+		}
+	}
+	return nil, context.DeadlineExceeded
+}
+
 func (m *mockMarketplaceRepo) CreateJob(ctx context.Context, job *domain.Job) error {
 	m.jobs = append(m.jobs, *job)
 	return nil
@@ -46,6 +55,14 @@ func (m *mockMarketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID string
 	return nil
 }
 
+func (m *mockMarketplaceRepo) RejectBid(ctx context.Context, jobID, bidID string, reason string) error {
+	return nil
+}
+
+func (m *mockMarketplaceRepo) CounterBid(ctx context.Context, bidID string, userID string, amount float64, reason string) error {
+	return nil
+}
+
 func (m *mockMarketplaceRepo) CompleteJob(ctx context.Context, jobID, userID string, score int, comment string) error {
 	return nil
 }
@@ -57,6 +74,10 @@ func (m *mockMarketplaceRepo) UpdateJobStatus(ctx context.Context, jobID string,
 			return nil
 		}
 	}
+	return nil
+}
+
+func (m *mockMarketplaceRepo) CancelJob(ctx context.Context, jobID string, userID string) error {
 	return nil
 }
 

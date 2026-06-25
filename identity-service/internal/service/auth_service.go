@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -54,16 +53,10 @@ func (s *authService) Register(ctx context.Context, req domain.RegisterRequest) 
 func (s *authService) Login(ctx context.Context, req domain.LoginRequest) (string, *domain.User, error) {
 	user, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		log.Printf("[LOGIN DEBUG] GetByEmail failed for %s: %v", req.Email, err)
 		return "", nil, fmt.Errorf("invalid credentials")
 	}
 
-	log.Printf("[LOGIN DEBUG] Comparing passwords for %s", req.Email)
-	log.Printf("[LOGIN DEBUG] Stored hash: [%s]", user.PasswordHash)
-	log.Printf("[LOGIN DEBUG] Provided password length: %d", len(req.Password))
-
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		log.Printf("[LOGIN DEBUG] Password comparison failed for %s: %v", req.Email, err)
 		return "", nil, fmt.Errorf("invalid credentials")
 	}
 
@@ -103,4 +96,16 @@ func (s *authService) VerifyUser(ctx context.Context, userID string, isVerified 
 	}
 	user.IsVerified = isVerified
 	return s.repo.Update(ctx, user)
+}
+
+func (s *authService) PurchaseCoverageBoost(ctx context.Context, userID string, durationDays int) error {
+	return s.repo.SetCoverageBoost(ctx, userID, durationDays)
+}
+
+func (s *authService) PurchaseRoamBoost(ctx context.Context, userID string, durationDays int) error {
+	return s.repo.SetRoamBoost(ctx, userID, durationDays)
+}
+
+func (s *authService) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
+	return s.repo.ToggleCoverageBoost(ctx, userID, active)
 }
