@@ -1,0 +1,56 @@
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and runtime files
+*.log
+*.pid
+*.out
+coverage/
+coverage.*
+
+# Go build and test artifacts
+bin/
+vendor/
+*.test
+*.prof
+
+# Service binaries
+/admin-service/admin
+/admin-service/admin-service
+/api-gateway/api-gateway
+/api-gateway/gateway
+/communication-service/comms
+/dispatch-service/dispatch
+/identity-service/identity
+/load-tester/loadtester
+/marketplace-service/marketplace
+/payment-service/payments
+
+# Flutter and Dart generated files
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/build/
+**/coverage/
+**/doc/api/
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# APK
+*.apk
