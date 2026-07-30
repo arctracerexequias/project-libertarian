@@ -155,22 +155,47 @@ class CustomerMainContainer extends StatefulWidget {
 
 class _CustomerMainContainerState extends State<CustomerMainContainer> {
   int _currentIndex = 0;
+  final ValueNotifier<int> _historyRefresh = ValueNotifier(0);
 
-  final List<Widget> _tabs = [
-    const HomeScreen(),
+  late final List<Widget> _tabs = [
+    HomeScreen(historyRefresh: _historyRefresh),
     const ProfileScreen(),
+    CustomerHistoryScreen(refreshSignal: _historyRefresh),
+    const CustomerHelpScreen(),
   ];
+
+  @override
+  void dispose() {
+    _historyRefresh.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _tabs),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Discover'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFD9EEF6),
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home'),
+          NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile'),
+          NavigationDestination(
+              icon: Icon(Icons.assignment_outlined),
+              selectedIcon: Icon(Icons.assignment),
+              label: 'History'),
+          NavigationDestination(
+              icon: Icon(Icons.help_outline),
+              selectedIcon: Icon(Icons.help),
+              label: 'Help'),
         ],
       ),
     );
