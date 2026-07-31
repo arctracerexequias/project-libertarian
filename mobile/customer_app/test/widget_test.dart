@@ -42,11 +42,87 @@ void main() {
     expect(find.text('Glasswork'), findsOneWidget);
     expect(find.text('Upholstery'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('HOME'),
+      find.text('Landscaping'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('HOME'), findsOneWidget);
+    expect(find.text('Painting'), findsOneWidget);
+    expect(find.text('Locksmith'), findsOneWidget);
+    expect(find.text('Masonry'), findsOneWidget);
+    expect(find.text('Landscaping'), findsOneWidget);
+  });
+
+  testWidgets('personal services shows every selectable subcategory',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PersonalServicesScreen(
+          initialLocation: null,
+          onJobCreated: () {},
+        ),
+      ),
+    );
+
+    const services = [
+      'Barber',
+      'Manicure / Pedicure',
+      'Hair Styling / Coloring / Hair Care',
+      'Massage',
+      'Elderly Care',
+      'Child Care',
+      'Physical Therapy',
+      'Occupational Therapy',
+      'Tutorial Services',
+      'House Keeping',
+      'Dog / Cat Grooming',
+      'Laundry / Ironing',
+    ];
+    for (final service in services) {
+      await tester.scrollUntilVisible(
+        find.text(service),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text(service), findsOneWidget);
+    }
+  });
+
+  testWidgets('every chosen personal service uses the same booking pattern',
+      (tester) async {
+    const services = [
+      'Barber',
+      'Manicure / Pedicure',
+      'Hair Styling / Coloring / Hair Care',
+      'Massage',
+      'Elderly Care',
+      'Child Care',
+      'Physical Therapy',
+      'Occupational Therapy',
+      'Tutorial Services',
+      'House Keeping',
+      'Dog / Cat Grooming',
+      'Laundry / Ironing',
+    ];
+
+    for (final service in services) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CreateJobScreen(
+            key: ValueKey(service),
+            initialCategory: 'Personal Care > $service',
+            onJobCreated: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Personal Services'), findsOneWidget);
+      expect(find.text(service), findsOneWidget);
+      expect(find.text('Home / Building / Unit Number'), findsOneWidget);
+      expect(find.text('Contact Number'), findsOneWidget);
+      expect(find.text('Set to Immediately'), findsOneWidget);
+      expect(find.text('NEXT'), findsOneWidget);
+    }
   });
 
   testWidgets('every chosen home repair type uses the same booking pattern',

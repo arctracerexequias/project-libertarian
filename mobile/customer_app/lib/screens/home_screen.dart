@@ -107,6 +107,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openPersonalServices() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PersonalServicesScreen(
+          initialLocation: _currentLocation,
+          onJobCreated: () {
+            final signal = widget.historyRefresh;
+            if (signal != null) signal.value++;
+          },
+        ),
+      ),
+    );
+  }
+
   void _openDeviceRepair() {
     Navigator.push(
       context,
@@ -202,12 +217,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             icon: service.icon,
                             onTap: service.category == 'Home Repair'
                                 ? _openHomeRepair
-                                : service.category == 'Appliance Repair'
-                                    ? _openApplianceRepair
-                                    : service.category == 'Device Repair'
-                                        ? _openDeviceRepair
-                                        : () => _openJobForm(
-                                            category: service.category),
+                                : service.category == 'Personal Care'
+                                    ? _openPersonalServices
+                                    : service.category == 'Appliance Repair'
+                                        ? _openApplianceRepair
+                                        : service.category == 'Device Repair'
+                                            ? _openDeviceRepair
+                                            : () => _openJobForm(
+                                                category: service.category),
                           );
                         }
 
@@ -838,6 +855,144 @@ class _FiveStepProgress extends StatelessWidget {
   }
 }
 
+class PersonalServicesScreen extends StatelessWidget {
+  final LatLng? initialLocation;
+  final VoidCallback onJobCreated;
+
+  const PersonalServicesScreen({
+    super.key,
+    required this.initialLocation,
+    required this.onJobCreated,
+  });
+
+  static const _services = <_RepairType>[
+    _RepairType('Barber', Icons.content_cut_rounded),
+    _RepairType('Manicure / Pedicure', Icons.back_hand_rounded),
+    _RepairType('Hair Styling / Coloring / Hair Care',
+        Icons.face_retouching_natural_rounded),
+    _RepairType('Massage', Icons.spa_rounded),
+    _RepairType('Elderly Care', Icons.elderly_rounded),
+    _RepairType('Child Care', Icons.child_care_rounded),
+    _RepairType('Physical Therapy', Icons.accessibility_new_rounded),
+    _RepairType('Occupational Therapy', Icons.health_and_safety_rounded),
+    _RepairType('Tutorial Services', Icons.school_rounded),
+    _RepairType('House Keeping', Icons.cleaning_services_rounded),
+    _RepairType('Dog / Cat Grooming', Icons.pets_rounded),
+    _RepairType('Laundry / Ironing', Icons.local_laundry_service_rounded),
+  ];
+
+  void _openBooking(BuildContext context, String service) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateJobScreen(
+          initialLocation: initialLocation,
+          initialCategory: 'Personal Care > $service',
+          initialTitle: '$service service',
+          onJobCreated: onJobCreated,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = width < 360 ? 18.0 : 32.0;
+    return Scaffold(
+      backgroundColor: _pageBackground,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                  horizontalPadding, 28, horizontalPadding, 34),
+              sliver: SliverList.list(
+                children: [
+                  const _StepProgress(),
+                  const SizedBox(height: 28),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.volunteer_activism_rounded,
+                          color: _brandBlue, size: 52),
+                      SizedBox(width: 12),
+                      Text(
+                        'Personal Services',
+                        style: TextStyle(
+                          color: _brandBlueDark,
+                          fontFamily: 'serif',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 42),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _services.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: .72,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 20,
+                    ),
+                    itemBuilder: (context, index) {
+                      final service = _services[index];
+                      return _ActionTile(
+                        label: service.label,
+                        icon: service.icon,
+                        onTap: () => _openBooking(context, service.label),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 42),
+                  _AdSpace(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerPromosScreen(
+                          onUsePromo: () => _openBooking(context, 'Massage'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Center(
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _brandBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 30),
+                      label: const Text(
+                        'HOME',
+                        style: TextStyle(
+                          fontFamily: 'serif',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class HomeRepairScreen extends StatelessWidget {
   final LatLng? initialLocation;
   final VoidCallback onJobCreated;
@@ -858,6 +1013,10 @@ class HomeRepairScreen extends StatelessWidget {
     _RepairType('Metalwork', Icons.hardware_rounded),
     _RepairType('Glasswork', Icons.window_rounded),
     _RepairType('Upholstery', Icons.chair_rounded),
+    _RepairType('Painting', Icons.format_paint_rounded),
+    _RepairType('Locksmith', Icons.key_rounded),
+    _RepairType('Masonry', Icons.foundation_rounded),
+    _RepairType('Landscaping', Icons.park_rounded),
   ];
 
   void _openRepairForm(BuildContext context, String repairType) {

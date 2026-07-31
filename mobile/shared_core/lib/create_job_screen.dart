@@ -78,6 +78,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool get _isChosenHomeRepair =>
       _category == 'Home Repair' &&
       (widget.initialCategory?.contains(' > ') ?? false);
+  bool get _isChosenPersonalCare =>
+      _category == 'Personal Care' &&
+      (widget.initialCategory?.contains(' > ') ?? false);
   bool get _isSpecialized =>
       _isVehicleRepair || _isApplianceRepair || _isDeviceRepair;
   int get _reviewStep => _isSpecialized ? 4 : 2;
@@ -107,11 +110,18 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       'Detailing',
     ],
     'Personal Care': [
-      'Hair Care',
+      'Barber',
+      'Manicure / Pedicure',
+      'Hair Styling / Coloring / Hair Care',
       'Massage',
-      'Child Care',
       'Elderly Care',
-      'Housekeeping',
+      'Child Care',
+      'Physical Therapy',
+      'Occupational Therapy',
+      'Tutorial Services',
+      'House Keeping',
+      'Dog / Cat Grooming',
+      'Laundry / Ironing',
     ],
     'Device Repair': [
       'Mobile Phone',
@@ -455,6 +465,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           _DeviceHeader(deviceType: _deviceType)
         else if (_isChosenHomeRepair)
           _ChosenHomeRepairHeader(subcategory: _subcategory)
+        else if (_isChosenPersonalCare)
+          _ChosenPersonalCareHeader(subcategory: _subcategory)
         else
           _ServiceHeader(
             category: _category,
@@ -1396,6 +1408,87 @@ class _ChosenHomeRepairHeader extends StatelessWidget {
         return Icons.park_rounded;
       default:
         return Icons.home_repair_service_rounded;
+    }
+  }
+}
+
+class _ChosenPersonalCareHeader extends StatelessWidget {
+  final String subcategory;
+
+  const _ChosenPersonalCareHeader({required this.subcategory});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.volunteer_activism_rounded, color: _odgBlue, size: 45),
+            SizedBox(width: 10),
+            Text(
+              'Personal Services',
+              style: TextStyle(
+                color: _odgBlue,
+                fontFamily: 'serif',
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_iconFor(subcategory), color: _odgBlue, size: 45),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                subcategory,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: _odgBlue,
+                  fontFamily: 'serif',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static IconData _iconFor(String service) {
+    switch (service) {
+      case 'Barber':
+        return Icons.content_cut_rounded;
+      case 'Manicure / Pedicure':
+        return Icons.back_hand_rounded;
+      case 'Hair Styling / Coloring / Hair Care':
+        return Icons.face_retouching_natural_rounded;
+      case 'Massage':
+        return Icons.spa_rounded;
+      case 'Elderly Care':
+        return Icons.elderly_rounded;
+      case 'Child Care':
+        return Icons.child_care_rounded;
+      case 'Physical Therapy':
+        return Icons.accessibility_new_rounded;
+      case 'Occupational Therapy':
+        return Icons.health_and_safety_rounded;
+      case 'Tutorial Services':
+        return Icons.school_rounded;
+      case 'House Keeping':
+        return Icons.cleaning_services_rounded;
+      case 'Dog / Cat Grooming':
+        return Icons.pets_rounded;
+      case 'Laundry / Ironing':
+        return Icons.local_laundry_service_rounded;
+      default:
+        return Icons.volunteer_activism_rounded;
     }
   }
 }
