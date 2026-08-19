@@ -14,6 +14,17 @@ The entire backend ecosystem is containerized using Docker.
 docker-compose up --build
 ```
 
+The development stack automatically creates these verified test accounts:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Customer | `customer1@odg.test` | `OdgTest123!` |
+| Customer | `customer2@odg.test` | `OdgTest123!` |
+| Service provider | `provider1@odg.test` | `OdgTest123!` |
+
+The seed is idempotent, so restarting the stack does not create duplicate
+accounts.
+
 The services will be available at:
 - **API Gateway:** `http://localhost:8080/api/v1`
 - **Admin Dashboard:** `http://localhost:8080/api/v1/admin/dashboard/`

@@ -111,8 +111,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     ],
     'Personal Care': [
       'Barber',
-      'Manicure / Pedicure',
-      'Hair Styling / Coloring / Hair Care',
+      'Manicure & Pedicure',
+      'Hair Styling, Coloring & Care',
       'Massage',
       'Elderly Care',
       'Child Care',
@@ -120,8 +120,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       'Occupational Therapy',
       'Tutorial Services',
       'House Keeping',
-      'Dog / Cat Grooming',
-      'Laundry / Ironing',
+      'Pet Grooming',
+      'Laundry & Ironing',
     ],
     'Device Repair': [
       'Mobile Phone',
@@ -136,9 +136,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     'Appliance Repair': [
       'HVAC',
       'Refrigerator',
-      'Stove / Oven',
+      'Stove & Oven',
       'Electric Fan',
-      'Washing Machine / Dryer',
+      'Washer & Dryer',
       'Television',
     ],
   };
@@ -417,6 +417,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final horizontalPadding =
+        MediaQuery.sizeOf(context).width < 360 ? 16.0 : 28.0;
     return Theme(
       data: Theme.of(context).copyWith(
         colorScheme: Theme.of(context).colorScheme.copyWith(primary: _odgBlue),
@@ -441,7 +443,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           child: _isSubmitting
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(28, 32, 28, 40),
+                  padding: EdgeInsets.fromLTRB(
+                      horizontalPadding, 32, horizontalPadding, 40),
                   child: _step == _resultStep ? _buildResult() : _buildForm(),
                 ),
         ),
@@ -514,8 +517,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: vehicles.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _responsiveColumnCount(context),
             childAspectRatio: .9,
             crossAxisSpacing: 8,
             mainAxisSpacing: 12,
@@ -537,14 +540,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(vehicle.$2, size: 58, color: _odgBlue),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Icon(vehicle.$2, size: 58, color: _odgBlue),
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text(vehicle.$1,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: _odgBlue,
-                            fontFamily: 'serif',
-                            fontWeight: FontWeight.w800)),
+                    Flexible(child: _AdaptiveChoiceLabel(vehicle.$1)),
                   ],
                 ),
               ),
@@ -613,9 +616,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     const appliances = <(String, IconData)>[
       ('HVAC', Icons.ac_unit_rounded),
       ('Refrigerator', Icons.kitchen_rounded),
-      ('Stove / Oven', Icons.local_fire_department_rounded),
+      ('Stove & Oven', Icons.local_fire_department_rounded),
       ('Electric Fan', Icons.mode_fan_off_rounded),
-      ('Washing Machine / Dryer', Icons.local_laundry_service_rounded),
+      ('Washer & Dryer', Icons.local_laundry_service_rounded),
       ('Television', Icons.tv_rounded),
     ];
     return Column(
@@ -624,8 +627,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: appliances.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _responsiveColumnCount(context),
             childAspectRatio: .82,
             crossAxisSpacing: 8,
             mainAxisSpacing: 12,
@@ -647,18 +650,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(appliance.$2, size: 54, color: _odgBlue),
-                    const SizedBox(height: 6),
-                    Text(
-                      appliance.$1,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: _odgBlue,
-                        fontFamily: 'serif',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Icon(appliance.$2, size: 54, color: _odgBlue),
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    Flexible(child: _AdaptiveChoiceLabel(appliance.$1)),
                   ],
                 ),
               ),
@@ -753,8 +752,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: devices.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _responsiveColumnCount(context),
             childAspectRatio: .84,
             crossAxisSpacing: 8,
             mainAxisSpacing: 10,
@@ -776,18 +775,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(device.$2, size: 52, color: _odgBlue),
-                    const SizedBox(height: 5),
-                    Text(
-                      device.$1,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: _odgBlue,
-                        fontFamily: 'serif',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Icon(device.$2, size: 52, color: _odgBlue),
                       ),
                     ),
+                    const SizedBox(height: 5),
+                    Flexible(child: _AdaptiveChoiceLabel(device.$1)),
                   ],
                 ),
               ),
@@ -883,37 +878,50 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: _barangay,
-                hint: const Text('Barangay'),
-                items: const ['Poblacion', 'Bel-Air', 'San Lorenzo', 'Bangkal']
-                    .map((value) =>
-                        DropdownMenuItem(value: value, child: Text(value)))
-                    .toList(),
-                onChanged: (value) => setState(() => _barangay = value),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: _city,
-                hint: const Text('City / Town'),
-                items: const [
-                  'Makati City',
-                  'Taguig City',
-                  'Pasig City',
-                  'Manila'
-                ]
-                    .map((value) =>
-                        DropdownMenuItem(value: value, child: Text(value)))
-                    .toList(),
-                onChanged: (value) => setState(() => _city = value),
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stackFields = constraints.maxWidth < 300 ||
+                MediaQuery.textScalerOf(context).scale(14) > 18;
+            final barangay = DropdownButtonFormField<String>(
+              value: _barangay,
+              isExpanded: true,
+              hint: const Text('Barangay', overflow: TextOverflow.ellipsis),
+              items: const ['Poblacion', 'Bel-Air', 'San Lorenzo', 'Bangkal']
+                  .map((value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value, overflow: TextOverflow.ellipsis)))
+                  .toList(),
+              onChanged: (value) => setState(() => _barangay = value),
+            );
+            final city = DropdownButtonFormField<String>(
+              value: _city,
+              isExpanded: true,
+              hint: const Text('City / Town', overflow: TextOverflow.ellipsis),
+              items: const [
+                'Makati City',
+                'Taguig City',
+                'Pasig City',
+                'Manila'
+              ]
+                  .map((value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value, overflow: TextOverflow.ellipsis)))
+                  .toList(),
+              onChanged: (value) => setState(() => _city = value),
+            );
+            if (stackFields) {
+              return Column(
+                children: [barangay, const SizedBox(height: 14), city],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: barangay),
+                const SizedBox(width: 12),
+                Expanded(child: city),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 14),
         TextField(
@@ -962,13 +970,15 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           onTap: () => _message('Promo FIRST10 will be checked at payment.'),
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            height: 116,
+            constraints: const BoxConstraints(minHeight: 116),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               border: Border.all(color: Colors.grey, width: 3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text('Save 10% • FIRST10',
@@ -981,6 +991,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         ),
       ],
     );
+  }
+
+  int _responsiveColumnCount(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return media.size.width < 360 || media.textScaler.scale(14) > 18 ? 2 : 3;
   }
 
   Widget _buildDetailsStep() {
@@ -1328,6 +1343,54 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   static String _yesNo(bool? value) => value == true ? 'Yes' : 'No';
 }
 
+class _AdaptiveChoiceLabel extends StatelessWidget {
+  final String label;
+
+  const _AdaptiveChoiceLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const style = TextStyle(
+          color: _odgBlue,
+          fontFamily: 'serif',
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          height: 1.08,
+        );
+        if (!label.contains(' ')) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              textAlign: TextAlign.center,
+              style: style,
+            ),
+          );
+        }
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: constraints.maxWidth,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              softWrap: true,
+              textWidthBasis: TextWidthBasis.longestLine,
+              style: style,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ChosenHomeRepairHeader extends StatelessWidget {
   final String subcategory;
 
@@ -1342,13 +1405,16 @@ class _ChosenHomeRepairHeader extends StatelessWidget {
           children: [
             Icon(Icons.home_rounded, color: _odgBlue, size: 45),
             SizedBox(width: 10),
-            Text(
-              'Home Repair',
-              style: TextStyle(
-                color: _odgBlue,
-                fontFamily: 'serif',
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+            Flexible(
+              child: Text(
+                'Home Repair',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _odgBlue,
+                  fontFamily: 'serif',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
@@ -1426,13 +1492,16 @@ class _ChosenPersonalCareHeader extends StatelessWidget {
           children: [
             Icon(Icons.volunteer_activism_rounded, color: _odgBlue, size: 45),
             SizedBox(width: 10),
-            Text(
-              'Personal Services',
-              style: TextStyle(
-                color: _odgBlue,
-                fontFamily: 'serif',
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+            Flexible(
+              child: Text(
+                'Personal Services',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _odgBlue,
+                  fontFamily: 'serif',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
@@ -1465,9 +1534,9 @@ class _ChosenPersonalCareHeader extends StatelessWidget {
     switch (service) {
       case 'Barber':
         return Icons.content_cut_rounded;
-      case 'Manicure / Pedicure':
+      case 'Manicure & Pedicure':
         return Icons.back_hand_rounded;
-      case 'Hair Styling / Coloring / Hair Care':
+      case 'Hair Styling, Coloring & Care':
         return Icons.face_retouching_natural_rounded;
       case 'Massage':
         return Icons.spa_rounded;
@@ -1483,9 +1552,9 @@ class _ChosenPersonalCareHeader extends StatelessWidget {
         return Icons.school_rounded;
       case 'House Keeping':
         return Icons.cleaning_services_rounded;
-      case 'Dog / Cat Grooming':
+      case 'Pet Grooming':
         return Icons.pets_rounded;
-      case 'Laundry / Ironing':
+      case 'Laundry & Ironing':
         return Icons.local_laundry_service_rounded;
       default:
         return Icons.volunteer_activism_rounded;
@@ -1508,12 +1577,15 @@ class _VehicleHeader extends StatelessWidget {
             Icon(Icons.settings_input_component_rounded,
                 color: _odgBlue, size: 45),
             SizedBox(width: 10),
-            Text('Vehicle Repair',
-                style: TextStyle(
-                    color: _odgBlue,
-                    fontFamily: 'serif',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
+            Flexible(
+              child: Text('Vehicle Repair',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: _odgBlue,
+                      fontFamily: 'serif',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800)),
+            ),
           ],
         ),
         if (vehicleType != null) ...[
@@ -1523,12 +1595,15 @@ class _VehicleHeader extends StatelessWidget {
             children: [
               Icon(_vehicleIcon(vehicleType!), color: _odgBlue, size: 48),
               const SizedBox(width: 12),
-              Text(vehicleType!,
-                  style: const TextStyle(
-                      color: _odgBlue,
-                      fontFamily: 'serif',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800)),
+              Flexible(
+                child: Text(vehicleType!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: _odgBlue,
+                        fontFamily: 'serif',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800)),
+              ),
             ],
           ),
         ],
@@ -1568,13 +1643,16 @@ class _ApplianceHeader extends StatelessWidget {
           children: [
             Icon(Icons.tv_rounded, color: _odgBlue, size: 45),
             SizedBox(width: 10),
-            Text(
-              'Appliance Repair',
-              style: TextStyle(
-                color: _odgBlue,
-                fontFamily: 'serif',
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+            Flexible(
+              child: Text(
+                'Appliance Repair',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _odgBlue,
+                  fontFamily: 'serif',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
@@ -1611,11 +1689,11 @@ class _ApplianceHeader extends StatelessWidget {
         return Icons.ac_unit;
       case 'Refrigerator':
         return Icons.kitchen;
-      case 'Stove / Oven':
+      case 'Stove & Oven':
         return Icons.local_fire_department;
       case 'Electric Fan':
         return Icons.mode_fan_off;
-      case 'Washing Machine / Dryer':
+      case 'Washer & Dryer':
         return Icons.local_laundry_service;
       default:
         return Icons.tv;
@@ -1637,13 +1715,16 @@ class _DeviceHeader extends StatelessWidget {
           children: [
             Icon(Icons.phone_android_rounded, color: _odgBlue, size: 45),
             SizedBox(width: 10),
-            Text(
-              'Device Repair',
-              style: TextStyle(
-                color: _odgBlue,
-                fontFamily: 'serif',
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+            Flexible(
+              child: Text(
+                'Device Repair',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _odgBlue,
+                  fontFamily: 'serif',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
@@ -1655,13 +1736,16 @@ class _DeviceHeader extends StatelessWidget {
             children: [
               Icon(_deviceIcon(deviceType!), color: _odgBlue, size: 45),
               const SizedBox(width: 12),
-              Text(
-                deviceType!,
-                style: const TextStyle(
-                  color: _odgBlue,
-                  fontFamily: 'serif',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
+              Flexible(
+                child: Text(
+                  deviceType!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _odgBlue,
+                    fontFamily: 'serif',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
@@ -1866,7 +1950,8 @@ class _AdPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 116,
+      constraints: const BoxConstraints(minHeight: 116),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey, width: 3),
@@ -1887,17 +1972,17 @@ class _ProgressHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(
         count,
-        (index) => Container(
-          width: count == 5 ? 60 : 76,
-          height: 24,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          decoration: BoxDecoration(
-            color: index == step ? _odgBlue : Colors.white,
-            border: Border.all(color: _odgBlue, width: 4),
-            borderRadius: BorderRadius.circular(20),
+        (index) => Expanded(
+          child: Container(
+            height: 24,
+            margin: EdgeInsets.only(right: index == count - 1 ? 0 : 6),
+            decoration: BoxDecoration(
+              color: index == step ? _odgBlue : Colors.white,
+              border: Border.all(color: _odgBlue, width: 4),
+              borderRadius: BorderRadius.circular(20),
+            ),
           ),
         ),
       ),
@@ -2081,14 +2166,19 @@ class _OdgButton extends StatelessWidget {
       height: 58,
       child: FilledButton.icon(
         onPressed: onPressed,
-        icon: Icon(icon, size: 30),
-        label: Text(label,
-            style: const TextStyle(
-                fontFamily: 'serif',
-                fontSize: 22,
-                fontWeight: FontWeight.w900)),
+        icon: Icon(icon, size: 26),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label,
+              maxLines: 1,
+              style: const TextStyle(
+                  fontFamily: 'serif',
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900)),
+        ),
         style: FilledButton.styleFrom(
           backgroundColor: _odgBlue,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),

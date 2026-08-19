@@ -174,29 +174,83 @@ class _CustomerMainContainerState extends State<CustomerMainContainer> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _tabs),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: Colors.white,
-        indicatorColor: const Color(0xFFD9EEF6),
+      bottomNavigationBar: CustomerBottomMenu(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home'),
-          NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Profile'),
-          NavigationDestination(
-              icon: Icon(Icons.assignment_outlined),
-              selectedIcon: Icon(Icons.assignment),
-              label: 'History'),
-          NavigationDestination(
-              icon: Icon(Icons.help_outline),
-              selectedIcon: Icon(Icons.help),
-              label: 'Help'),
-        ],
+        onSelected: (index) => setState(() => _currentIndex = index),
+      ),
+    );
+  }
+}
+
+class CustomerBottomMenu extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  const CustomerBottomMenu({
+    super.key,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  static const _items = <(String, IconData)>[
+    ('Home', Icons.home_outlined),
+    ('Profile', Icons.person_rounded),
+    ('History', Icons.assignment_outlined),
+    ('Help', Icons.question_mark_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 4,
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 78,
+          child: Row(
+            children: List.generate(_items.length, (index) {
+              final item = _items[index];
+              final selected = selectedIndex == index;
+              return Expanded(
+                child: Semantics(
+                  button: true,
+                  selected: selected,
+                  label: '${item.$1} tab',
+                  child: InkWell(
+                    onTap: () => onSelected(index),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 7, bottom: 5),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            item.$2,
+                            size: 32,
+                            color: const Color(0xFF006996),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            item.$1,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: const Color(0xFF00577D),
+                              fontFamily: 'serif',
+                              fontSize: 14,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
       ),
     );
   }

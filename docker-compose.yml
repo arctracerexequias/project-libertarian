@@ -29,6 +29,19 @@ services:
     networks:
       - marketplace-network
 
+  db-seed:
+    image: postgis/postgis:15-3.4
+    environment:
+      PGPASSWORD: password
+    volumes:
+      - ./database/seed.sql:/seed.sql:ro
+    command: ["psql", "-h", "db", "-U", "user", "-d", "marketplace", "-v", "ON_ERROR_STOP=1", "-f", "/seed.sql"]
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+
   api-gateway:
     build: ./api-gateway
     environment:
@@ -53,7 +66,7 @@ services:
       DATABASE_URL: postgres://user:password@db:5432/marketplace
       JWT_SECRET: super_secret_jwt_key_for_development
     depends_on:
-      db-migrate:
+      db-seed:
         condition: service_completed_successfully
     networks:
       - marketplace-network

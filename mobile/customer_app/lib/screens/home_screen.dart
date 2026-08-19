@@ -20,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _dispatchService = DispatchService();
   LatLng? _currentLocation;
+  bool _hasUnreadNotifications = true;
 
   static const _services = <_ServiceShortcut>[
     _ServiceShortcut('Home Repair', Icons.home_rounded, 'Home Repair'),
@@ -61,11 +62,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openHistory() {
-    Navigator.push(
+  Future<void> _openNotifications() async {
+    await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const CustomerHistoryScreen()),
+      MaterialPageRoute(builder: (_) => const CustomerNotificationsScreen()),
     );
+    if (mounted && _hasUnreadNotifications) {
+      setState(() => _hasUnreadNotifications = false);
+    }
   }
 
   void _openPromos() {
@@ -167,130 +171,148 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final horizontalPadding = width < 360 ? 16.0 : 24.0;
+    const dashboardWidth = 390.0;
 
     return Scaffold(
       backgroundColor: _pageBackground,
       body: SafeArea(
-        child: RefreshIndicator(
-          color: _brandBlue,
-          onRefresh: _loadLocation,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                    horizontalPadding, 16, horizontalPadding, 28),
-                sliver: SliverList.list(
-                  children: [
-                    _HomeHeader(onNotificationsTap: _openHistory),
-                    const SizedBox(height: 34),
-                    const Text(
-                      'How can we help today?',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _brandBlue,
-                        fontFamily: 'serif',
-                        fontSize: 27,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 9,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        childAspectRatio: .86,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 14,
-                      ),
-                      itemBuilder: (context, index) {
-                        if (index < _services.length) {
-                          final service = _services[index];
-                          return _ActionTile(
-                            label: service.label,
-                            icon: service.icon,
-                            onTap: service.category == 'Home Repair'
-                                ? _openHomeRepair
-                                : service.category == 'Personal Care'
-                                    ? _openPersonalServices
-                                    : service.category == 'Appliance Repair'
-                                        ? _openApplianceRepair
-                                        : service.category == 'Device Repair'
-                                            ? _openDeviceRepair
-                                            : () => _openJobForm(
-                                                category: service.category),
-                          );
-                        }
-
-                        final extras = [
-                          _ExtraShortcut(
-                            'Job Requests',
-                            Icons.handyman_rounded,
-                            () => _openJobForm(),
-                          ),
-                          _ExtraShortcut(
-                            'Promos',
-                            Icons.percent_rounded,
-                            _openPromos,
-                          ),
-                          _ExtraShortcut(
-                            'Refer Us!',
-                            Icons.forum_rounded,
-                            _referFriend,
-                          ),
-                          _ExtraShortcut(
-                            'Rewards',
-                            Icons.diamond_rounded,
-                            _openRewards,
-                          ),
-                        ];
-                        final extra = extras[index - _services.length];
-                        return _ActionTile(
-                          label: extra.label,
-                          icon: extra.icon,
-                          onTap: extra.onTap,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    _AdSpace(onTap: _openPromos),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        children: [
-                          const Text(
-                            'Skilled Enough? ',
-                            style: TextStyle(
-                                color: Color(0xFF6666FF), fontSize: 14),
-                          ),
-                          GestureDetector(
-                            onTap: _registerAsProvider,
-                            child: const Text(
-                              'Be a Service Provider!',
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return RefreshIndicator(
+              color: _brandBlue,
+              onRefresh: _loadLocation,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: dashboardWidth,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _HomeHeader(
+                              onNotificationsTap: _openNotifications,
+                              unreadCount: _hasUnreadNotifications ? 1 : 0,
+                            ),
+                            const SizedBox(height: 24),
+                            const Text(
+                              'How can we help today?',
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: _brandBlueDark,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                decoration: TextDecoration.underline,
-                                decorationColor: _brandBlueDark,
+                                color: _brandBlue,
+                                fontFamily: 'serif',
+                                fontSize: 27,
+                                fontWeight: FontWeight.w800,
+                                height: 1.1,
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: 9,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                childAspectRatio: .94,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 10,
+                              ),
+                              itemBuilder: (context, index) {
+                                if (index < _services.length) {
+                                  final service = _services[index];
+                                  return _ActionTile(
+                                    label: service.label,
+                                    icon: service.icon,
+                                    onTap: service.category == 'Home Repair'
+                                        ? _openHomeRepair
+                                        : service.category == 'Personal Care'
+                                            ? _openPersonalServices
+                                            : service.category ==
+                                                    'Appliance Repair'
+                                                ? _openApplianceRepair
+                                                : service.category ==
+                                                        'Device Repair'
+                                                    ? _openDeviceRepair
+                                                    : () => _openJobForm(
+                                                        category:
+                                                            service.category),
+                                  );
+                                }
+
+                                final extras = [
+                                  _ExtraShortcut(
+                                    'Job Requests',
+                                    Icons.handyman_rounded,
+                                    () => _openJobForm(),
+                                  ),
+                                  _ExtraShortcut(
+                                    'Promos',
+                                    Icons.percent_rounded,
+                                    _openPromos,
+                                  ),
+                                  _ExtraShortcut(
+                                    'Refer Us!',
+                                    Icons.forum_rounded,
+                                    _referFriend,
+                                  ),
+                                  _ExtraShortcut(
+                                    'Rewards',
+                                    Icons.diamond_rounded,
+                                    _openRewards,
+                                  ),
+                                ];
+                                final extra = extras[index - _services.length];
+                                return _ActionTile(
+                                  label: extra.label,
+                                  icon: extra.icon,
+                                  onTap: extra.onTap,
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _AdSpace(onTap: _openPromos),
+                            const SizedBox(height: 14),
+                            Center(
+                              child: Wrap(
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Skilled Enough? ',
+                                    style: TextStyle(
+                                        color: Color(0xFF6666FF), fontSize: 14),
+                                  ),
+                                  GestureDetector(
+                                    onTap: _registerAsProvider,
+                                    child: const Text(
+                                      'Be a Service Provider!',
+                                      style: TextStyle(
+                                        color: _brandBlueDark,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: _brandBlueDark,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -299,8 +321,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _HomeHeader extends StatelessWidget {
   final VoidCallback onNotificationsTap;
+  final int unreadCount;
 
-  const _HomeHeader({required this.onNotificationsTap});
+  const _HomeHeader({
+    required this.onNotificationsTap,
+    required this.unreadCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -319,31 +345,37 @@ class _HomeHeader extends StatelessWidget {
         ),
         Semantics(
           button: true,
-          label: 'Notifications, 1 unread',
+          label: unreadCount == 0
+              ? 'Notifications, no unread items'
+              : 'Notifications, $unreadCount unread',
           child: InkResponse(
             radius: 28,
             onTap: onNotificationsTap,
-            child: const SizedBox(
+            child: SizedBox(
               width: 48,
               height: 48,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Align(
+                  const Align(
                     alignment: Alignment.center,
                     child: Icon(Icons.notifications_rounded,
                         color: _brandBlue, size: 38),
                   ),
-                  Positioned(
-                    right: -2,
-                    top: 0,
-                    child: CircleAvatar(
-                      radius: 14,
-                      backgroundColor: _brandRed,
-                      child: Text('1',
-                          style: TextStyle(color: Colors.white, fontSize: 13)),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: -2,
+                      top: 0,
+                      child: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: _brandRed,
+                        child: Text(
+                          '$unreadCount',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 13),
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -385,20 +417,164 @@ class _ActionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 7),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: const TextStyle(
-                  color: _brandBlueDark,
-                  fontFamily: 'serif',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  height: 1.05,
-                ),
-              ),
+              Flexible(child: _AdaptiveServiceLabel(label)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdaptiveServiceLabel extends StatelessWidget {
+  final String label;
+
+  const _AdaptiveServiceLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    final displayLabel =
+        label == 'Occupational Therapy' ? 'Occupational\nTherapy' : label;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const style = TextStyle(
+          color: _brandBlueDark,
+          fontFamily: 'serif',
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          height: 1.08,
+        );
+        if (label == 'Occupational Therapy') {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: Text(
+              displayLabel,
+              maxLines: 2,
+              softWrap: false,
+              textAlign: TextAlign.center,
+              semanticsLabel: label,
+              style: style,
+            ),
+          );
+        }
+        if (!label.contains(' ')) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: Text(
+              displayLabel,
+              maxLines: 1,
+              softWrap: false,
+              textAlign: TextAlign.center,
+              semanticsLabel: label,
+              style: style,
+            ),
+          );
+        }
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: constraints.maxWidth,
+            child: Text(
+              displayLabel,
+              textAlign: TextAlign.center,
+              softWrap: true,
+              textWidthBasis: TextWidthBasis.longestLine,
+              semanticsLabel: label,
+              style: style,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class CustomerNotificationsScreen extends StatelessWidget {
+  const CustomerNotificationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _pageBackground,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: _brandBlueDark,
+        title: const Text(
+          'Notifications',
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5F3F8),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _brandBlue.withValues(alpha: .25)),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.notifications_rounded, color: _brandBlue),
+                  ),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome to ODG',
+                          style: TextStyle(
+                            color: _brandBlueDark,
+                            fontFamily: 'serif',
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(height: 5),
+                        Text(
+                          'Updates about your service requests, bids, and '
+                          'provider arrivals will appear here.',
+                          style: TextStyle(color: _brandBlueDark, height: 1.3),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Just now',
+                          style: TextStyle(
+                            color: _brandBlue,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.done_all_rounded),
+              label: const Text('Mark all as read'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _brandBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -423,27 +599,34 @@ class _AdSpace extends StatelessWidget {
           border: Border.all(color: const Color(0xFF777777), width: 4),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Save 10% on your next service',
-              style: TextStyle(
-                color: Color(0xFF6666FF),
-                fontFamily: 'serif',
-                fontSize: 20,
-              ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Save 10% on your next service',
+                  style: TextStyle(
+                    color: Color(0xFF6666FF),
+                    fontFamily: 'serif',
+                    fontSize: 20,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'View available promos',
+                  style: TextStyle(
+                    color: _brandBlueDark,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 6),
-            Text(
-              'View available promos',
-              style: TextStyle(
-                color: _brandBlueDark,
-                fontWeight: FontWeight.w700,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -615,13 +798,16 @@ class DeviceRepairScreen extends StatelessWidget {
                       Icon(Icons.phone_android_rounded,
                           color: _brandBlue, size: 52),
                       SizedBox(width: 12),
-                      Text(
-                        'Device Repair',
-                        style: TextStyle(
-                          color: _brandBlueDark,
-                          fontFamily: 'serif',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'Device Repair',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _brandBlueDark,
+                            fontFamily: 'serif',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
@@ -631,10 +817,9 @@ class DeviceRepairScreen extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _devices.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: .78,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: width < 360 ? 2 : 3,
+                      childAspectRatio: width < 360 ? .95 : .78,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 22,
                     ),
@@ -704,9 +889,9 @@ class ApplianceRepairScreen extends StatelessWidget {
   static const _appliances = <_RepairType>[
     _RepairType('HVAC', Icons.ac_unit_rounded),
     _RepairType('Refrigerator', Icons.kitchen_rounded),
-    _RepairType('Stove / Oven', Icons.local_fire_department_rounded),
+    _RepairType('Stove & Oven', Icons.local_fire_department_rounded),
     _RepairType('Electric Fan', Icons.toys_rounded),
-    _RepairType('Washing Machine / Dryer', Icons.local_laundry_service_rounded),
+    _RepairType('Washer & Dryer', Icons.local_laundry_service_rounded),
     _RepairType('Television', Icons.tv_rounded),
   ];
 
@@ -748,13 +933,16 @@ class ApplianceRepairScreen extends StatelessWidget {
                     children: [
                       Icon(Icons.tv_rounded, color: _brandBlue, size: 52),
                       SizedBox(width: 12),
-                      Text(
-                        'Appliance Repair',
-                        style: TextStyle(
-                          color: _brandBlueDark,
-                          fontFamily: 'serif',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'Appliance Repair',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _brandBlueDark,
+                            fontFamily: 'serif',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
@@ -764,10 +952,9 @@ class ApplianceRepairScreen extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _appliances.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: .8,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: width < 360 ? 2 : 3,
+                      childAspectRatio: width < 360 ? .95 : .8,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 24,
                     ),
@@ -867,9 +1054,9 @@ class PersonalServicesScreen extends StatelessWidget {
 
   static const _services = <_RepairType>[
     _RepairType('Barber', Icons.content_cut_rounded),
-    _RepairType('Manicure / Pedicure', Icons.back_hand_rounded),
-    _RepairType('Hair Styling / Coloring / Hair Care',
-        Icons.face_retouching_natural_rounded),
+    _RepairType('Manicure & Pedicure', Icons.back_hand_rounded),
+    _RepairType(
+        'Hair Styling, Coloring & Care', Icons.face_retouching_natural_rounded),
     _RepairType('Massage', Icons.spa_rounded),
     _RepairType('Elderly Care', Icons.elderly_rounded),
     _RepairType('Child Care', Icons.child_care_rounded),
@@ -877,8 +1064,8 @@ class PersonalServicesScreen extends StatelessWidget {
     _RepairType('Occupational Therapy', Icons.health_and_safety_rounded),
     _RepairType('Tutorial Services', Icons.school_rounded),
     _RepairType('House Keeping', Icons.cleaning_services_rounded),
-    _RepairType('Dog / Cat Grooming', Icons.pets_rounded),
-    _RepairType('Laundry / Ironing', Icons.local_laundry_service_rounded),
+    _RepairType('Pet Grooming', Icons.pets_rounded),
+    _RepairType('Laundry & Ironing', Icons.local_laundry_service_rounded),
   ];
 
   void _openBooking(BuildContext context, String service) {
@@ -917,13 +1104,16 @@ class PersonalServicesScreen extends StatelessWidget {
                       Icon(Icons.volunteer_activism_rounded,
                           color: _brandBlue, size: 52),
                       SizedBox(width: 12),
-                      Text(
-                        'Personal Services',
-                        style: TextStyle(
-                          color: _brandBlueDark,
-                          fontFamily: 'serif',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'Personal Services',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _brandBlueDark,
+                            fontFamily: 'serif',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
@@ -933,10 +1123,9 @@ class PersonalServicesScreen extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _services.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: .72,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: width < 360 ? 2 : 3,
+                      childAspectRatio: width < 360 ? .9 : .72,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 20,
                     ),
@@ -1066,13 +1255,16 @@ class HomeRepairScreen extends StatelessWidget {
                     children: [
                       Icon(Icons.home_rounded, color: _brandBlue, size: 56),
                       SizedBox(width: 10),
-                      Text(
-                        'Home Repair',
-                        style: TextStyle(
-                          color: _brandBlueDark,
-                          fontFamily: 'serif',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          'Home Repair',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _brandBlueDark,
+                            fontFamily: 'serif',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ],
@@ -1082,10 +1274,9 @@ class HomeRepairScreen extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _repairTypes.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: .86,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: width < 360 ? 2 : 3,
+                      childAspectRatio: width < 360 ? 1 : .86,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 20,
                     ),
@@ -1103,7 +1294,9 @@ class HomeRepairScreen extends StatelessWidget {
                     onTap: () => _openPromos(context),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      height: 116,
+                      constraints: const BoxConstraints(minHeight: 116),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 18),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -1112,6 +1305,7 @@ class HomeRepairScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Column(
+                        mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
