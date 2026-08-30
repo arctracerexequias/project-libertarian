@@ -56,7 +56,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Future<void> _fetchEscrowStatus() async {
-    final status = await _paymentService.getEscrowStatus(widget.job.id);
+    final status = widget.job.isCashOnDelivery
+        ? null
+        : await _paymentService.getEscrowStatus(widget.job.id);
     Bid? acceptedBid;
     try {
       final bids = await _marketplaceService.getBids(widget.job.id);
@@ -78,11 +80,14 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   void _fundEscrow() async {
+    if (widget.job.isCashOnDelivery) return;
     setState(() => _isFunding = true);
     final bids = await _marketplaceService.getBids(widget.job.id);
-    final acceptedBid = bids.firstWhere((b) => b.status == 'accepted', orElse: () => bids.first);
-    
-    final result = await _paymentService.initEscrow(widget.job.id, acceptedBid.amount);
+    final acceptedBid = bids.firstWhere((b) => b.status == 'accepted',
+        orElse: () => bids.first);
+
+    final result =
+        await _paymentService.initEscrow(widget.job.id, acceptedBid.amount);
     setState(() => _isFunding = false);
 
     if (result != null) {
@@ -109,8 +114,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     setState(() => _isChatLoading = false);
 
     if (profile != null && mounted) {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => ChatScreen(jobId: widget.job.id, userId: profile.id)));
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) =>
+                  ChatScreen(jobId: widget.job.id, userId: profile.id)));
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to load user profile for chat.')),
@@ -121,7 +129,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   void _acceptJobDirect() async {
     if (widget.job.maxBudget == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot accept job: Client has not set an initial offer.')),
+        const SnackBar(
+            content: Text(
+                'Cannot accept job: Client has not set an initial offer.')),
       );
       return;
     }
@@ -133,7 +143,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       message: 'Direct Acceptance of Client Offer.',
     );
     if (bid != null) {
-      final success = await _marketplaceService.acceptBid(widget.job.id, bid.id);
+      final success =
+          await _marketplaceService.acceptBid(widget.job.id, bid.id);
       setState(() => _isActionLoading = false);
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -161,11 +172,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   void _updateStatus(JobStatus newStatus) async {
     setState(() => _isActionLoading = true);
-    final success = await _marketplaceService.updateJobStatus(widget.job.id, newStatus);
+    final success =
+        await _marketplaceService.updateJobStatus(widget.job.id, newStatus);
     setState(() => _isActionLoading = false);
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Status updated to ${newStatus.name.toUpperCase()}')),
+        SnackBar(
+            content: Text('Status updated to ${newStatus.name.toUpperCase()}')),
       );
       if (mounted) {
         setState(() {
@@ -185,12 +198,17 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Job'),
-        content: const Text('Are you sure you want to cancel this job? This will trigger a refund if payment is in escrow.'),
+        content: Text(widget.job.isCashOnDelivery
+            ? 'Are you sure you want to cancel this job? No online refund is needed for cash payment.'
+            : 'Are you sure you want to cancel this job? This will trigger a refund if payment is in escrow.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true), 
-            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child:
+                const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -223,16 +241,17 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Rebook Service?'),
-        content: const Text('Would you like to schedule this provider for another session of this service?'),
+        content: const Text(
+            'Would you like to schedule this provider for another session of this service?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('No')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('No')),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _navigateToRebook();
-            }, 
-            child: const Text('Yes, Rebook')
-          ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _navigateToRebook();
+              },
+              child: const Text('Yes, Rebook')),
         ],
       ),
     );
@@ -245,7 +264,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         builder: (context) => CreateJobScreen(
           onJobCreated: () {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Rebooking scheduled successfully!')),
+              const SnackBar(
+                  content: Text('Rebooking scheduled successfully!')),
             );
           },
           initialLocation: widget.job.location,
@@ -264,7 +284,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
 
     if (isProvider) {
-      if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding) {
+      if (_currentStatus == JobStatus.published ||
+          _currentStatus == JobStatus.bidding) {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -280,7 +301,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               const SizedBox(height: 8),
               Text(
                 'Location details are hidden',
-                style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(
+                    color: Colors.amber.shade900,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
               ),
               const SizedBox(height: 4),
               Text(
@@ -307,7 +331,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.blue.shade300, width: 2),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
+            ],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
@@ -347,7 +373,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.green.shade300, width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
@@ -365,7 +393,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               markers: [
                 Marker(
                   point: widget.job.location!,
-                  child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                  child: const Icon(Icons.location_on,
+                      color: Colors.red, size: 40),
                 ),
               ],
             ),
@@ -415,40 +444,55 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Theme.of(context).primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      _currentStatus.name.toUpperCase(), 
-                      style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 13),
+                      _currentStatus.name.toUpperCase(),
+                      style: TextStyle(
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13),
                     ),
                   ),
                   Text(
-                    widget.job.maxBudget != null ? '₱${widget.job.maxBudget!.toStringAsFixed(2)}' : 'No Offer',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
+                    widget.job.maxBudget != null
+                        ? '₱${widget.job.maxBudget!.toStringAsFixed(2)}'
+                        : 'No Offer',
+                    style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              Text(widget.job.description, style: const TextStyle(fontSize: 16, height: 1.4)),
+              Text(widget.job.description,
+                  style: const TextStyle(fontSize: 16, height: 1.4)),
               if (_acceptedBid != null) ...[
                 const SizedBox(height: 16),
                 Card(
                   color: Colors.blue.shade50,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
                     leading: const CircleAvatar(
                       backgroundColor: Colors.blue,
                       child: Icon(Icons.person, color: Colors.white),
                     ),
-                    title: const Text('Assigned Provider', style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                    title: const Text('Assigned Provider',
+                        style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
                     subtitle: Text(
-                      _acceptedBid!.providerName.isNotEmpty 
-                          ? _acceptedBid!.providerName 
+                      _acceptedBid!.providerName.isNotEmpty
+                          ? _acceptedBid!.providerName
                           : 'Service Provider',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87),
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -470,11 +514,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               _buildMapSection(isProvider),
               const SizedBox(height: 8),
               if (_isActionLoading)
-                const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+                const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator()))
               else ...[
                 // Providers Options
                 if (isProvider) ...[
-                  if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding) ...[
+                  if (_currentStatus == JobStatus.published ||
+                      _currentStatus == JobStatus.bidding) ...[
                     Row(
                       children: [
                         Expanded(
@@ -502,7 +550,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   isCounter: true,
                                   onBidSubmitted: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Counter-offer submitted successfully!')),
+                                      const SnackBar(
+                                          content: Text(
+                                              'Counter-offer submitted successfully!')),
                                     );
                                     Navigator.pop(context, true);
                                   },
@@ -562,7 +612,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         children: [
                           Icon(Icons.engineering, color: Colors.green),
                           SizedBox(width: 8),
-                          Text('Work in Progress - Do your best!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                          Text('Work in Progress - Do your best!',
+                              style: TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -585,40 +638,88 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
                 // Customers Options
                 if (!isProvider) ...[
-                  if (_currentStatus == JobStatus.published || _currentStatus == JobStatus.bidding || _currentStatus == JobStatus.accepted)
+                  if (_currentStatus == JobStatus.published ||
+                      _currentStatus == JobStatus.bidding ||
+                      _currentStatus == JobStatus.accepted)
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(
-                          builder: (context) => ViewBidsScreen(jobId: widget.job.id, onBidAccepted: () => Navigator.pop(context)))),
+                        onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => ViewBidsScreen(
+                                    jobId: widget.job.id,
+                                    onBidAccepted: () =>
+                                        Navigator.pop(context)))),
                         icon: const Icon(Icons.local_offer),
                         label: const Text('Review Offers & Counters'),
                       ),
                     ),
-                  if (_currentStatus == JobStatus.accepted && (_escrowStatus == null || _escrowStatus!['status'] != 'HELD'))
-                    _isFunding 
-                      ? const CircularProgressIndicator()
-                      : SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton.icon(
-                            onPressed: _fundEscrow,
-                            icon: const Icon(Icons.account_balance_wallet),
-                            label: const Text('Fund Escrow'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                          ),
-                        ),
-                  if (_escrowStatus != null && _escrowStatus!['status'] == 'HELD') ...[
+                  if (widget.job.isCashOnDelivery &&
+                      (_currentStatus == JobStatus.accepted ||
+                          _currentStatus == JobStatus.enRoute ||
+                          _currentStatus == JobStatus.inProgress ||
+                          _currentStatus == JobStatus.completed)) ...[
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.payments_outlined, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Cash payment after service — no escrow funding required',
+                              style: TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (!widget.job.isCashOnDelivery &&
+                      _currentStatus == JobStatus.accepted &&
+                      (_escrowStatus == null ||
+                          _escrowStatus!['status'] != 'HELD'))
+                    _isFunding
+                        ? const CircularProgressIndicator()
+                        : SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              onPressed: _fundEscrow,
+                              icon: const Icon(Icons.account_balance_wallet),
+                              label: const Text('Fund Escrow'),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.white),
+                            ),
+                          ),
+                  if (!widget.job.isCashOnDelivery &&
+                      _escrowStatus != null &&
+                      _escrowStatus!['status'] == 'HELD') ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
                       child: const Row(
                         children: [
                           Icon(Icons.lock, color: Colors.green),
                           SizedBox(width: 8),
-                          Text('Payment Secured in Escrow', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                          Text('Payment Secured in Escrow',
+                              style: TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -637,7 +738,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 job: widget.job,
                                 onRated: () {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Provider rated successfully!')),
+                                    const SnackBar(
+                                        content: Text(
+                                            'Provider rated successfully!')),
                                   );
                                 },
                               ),
@@ -649,7 +752,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           },
                           icon: const Icon(Icons.star_rate),
                           label: const Text('Rate & Review Provider'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -657,20 +762,28 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8)),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.check_circle, color: Colors.blue),
                             SizedBox(width: 8),
-                            Text('You have rated this provider', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                            Text('You have rated this provider',
+                                style: TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
                     ],
                   ],
-                  if (_currentStatus == JobStatus.completed && _escrowStatus != null && _escrowStatus!['status'] == 'HELD') ...[
+                  if (!widget.job.isCashOnDelivery &&
+                      _currentStatus == JobStatus.completed &&
+                      _escrowStatus != null &&
+                      _escrowStatus!['status'] == 'HELD') ...[
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -678,12 +791,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         onPressed: _releasePayment,
                         icon: const Icon(Icons.payment),
                         label: const Text('Release Payment'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white),
                       ),
                     ),
                     const SizedBox(height: 16),
                   ],
-                  if (_currentStatus == JobStatus.accepted || _currentStatus == JobStatus.enRoute || _currentStatus == JobStatus.inProgress) ...[
+                  if (_currentStatus == JobStatus.accepted ||
+                      _currentStatus == JobStatus.enRoute ||
+                      _currentStatus == JobStatus.inProgress) ...[
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -695,7 +812,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               job: widget.job,
                               onRated: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Job marked as completed and provider rated!')),
+                                  const SnackBar(
+                                      content: Text(
+                                          'Job marked as completed and provider rated!')),
                                 );
                               },
                             ),
@@ -712,33 +831,37 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         },
                         icon: const Icon(Icons.check_circle),
                         label: const Text('Mark as Completed'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white),
                       ),
                     ),
                     const SizedBox(height: 16),
                   ],
                 ],
-                
+
                 const SizedBox(height: 16),
-                _isChatLoading 
-                  ? const CircularProgressIndicator()
-                  : SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _navigateToChat,
-                        icon: const Icon(Icons.chat),
-                        label: const Text('Chat with Participant'),
+                _isChatLoading
+                    ? const CircularProgressIndicator()
+                    : SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _navigateToChat,
+                          icon: const Icon(Icons.chat),
+                          label: const Text('Chat with Participant'),
+                        ),
                       ),
-                    ),
-                if (_currentStatus != JobStatus.completed && _currentStatus != JobStatus.cancelled) ...[
+                if (_currentStatus != JobStatus.completed &&
+                    _currentStatus != JobStatus.cancelled) ...[
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: TextButton.icon(
                       onPressed: _cancelJob,
                       icon: const Icon(Icons.cancel, color: Colors.red),
-                      label: const Text('Cancel Job', style: TextStyle(color: Colors.red)),
+                      label: const Text('Cancel Job',
+                          style: TextStyle(color: Colors.red)),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),

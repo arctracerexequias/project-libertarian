@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     category TEXT NOT NULL, -- e.g., 'home_repair', 'personal_care'
     status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PUBLISHED', 'BIDDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED', 'DISPUTED', 'CANCELLED')),
     max_budget DECIMAL(12, 2),
+    payment_method TEXT NOT NULL DEFAULT 'ONLINE' CHECK (payment_method IN ('ONLINE', 'GCASH', 'MAYA', 'CASH')),
     location GEOGRAPHY(POINT, 4326) NOT NULL,
     scheduled_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -128,4 +129,3 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS skills TEXT[]; -- For providers
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS rebook_count INT DEFAULT 0; -- Track rebooking metric
-

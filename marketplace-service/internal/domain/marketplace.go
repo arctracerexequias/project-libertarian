@@ -13,6 +13,7 @@ type Job struct {
 	Category           string    `json:"category"`
 	Status             string    `json:"status"`
 	MaxBudget          float64   `json:"max_budget"`
+	PaymentMethod      string    `json:"payment_method"`
 	IsEmergency        bool      `json:"is_emergency"`
 	Lat                float64   `json:"lat"`
 	Lng                float64   `json:"lng"`
@@ -47,6 +48,7 @@ type CreateJobRequest struct {
 	Description      string     `json:"description" binding:"required"`
 	Category         string     `json:"category" binding:"required"`
 	MaxBudget        float64    `json:"max_budget"`
+	PaymentMethod    string     `json:"payment_method" binding:"omitempty,oneof=ONLINE GCASH MAYA CASH"`
 	IsEmergency      bool       `json:"is_emergency"`
 	Lat              float64    `json:"lat"`
 	Lng              float64    `json:"lng"`

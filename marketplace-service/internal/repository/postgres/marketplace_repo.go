@@ -18,7 +18,7 @@ func NewMarketplaceRepository(db *pgxpool.Pool) domain.MarketplaceRepository {
 }
 
 func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng, radius float64) ([]domain.Job, error) {
-	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at FROM jobs WHERE status IN ('PUBLISHED', 'BIDDING')"
+	query := "SELECT id, customer_id, title, description, category, status, max_budget, payment_method, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at FROM jobs WHERE status IN ('PUBLISHED', 'BIDDING')"
 	var args []interface{}
 	argCount := 1
 
@@ -45,7 +45,7 @@ func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng
 	var jobs []domain.Job
 	for rows.Next() {
 		var j domain.Job
-		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
+		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.PaymentMethod, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
 		if err != nil {
 			continue
 		}
@@ -58,9 +58,9 @@ func (r *marketplaceRepo) GetJobs(ctx context.Context, category string, lat, lng
 }
 
 func (r *marketplaceRepo) GetJobByID(ctx context.Context, id string) (*domain.Job, error) {
-	query := "SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at FROM jobs WHERE id = $1"
+	query := "SELECT id, customer_id, title, description, category, status, max_budget, payment_method, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at FROM jobs WHERE id = $1"
 	var j domain.Job
-	err := r.db.QueryRow(ctx, query, id).Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
+	err := r.db.QueryRow(ctx, query, id).Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.PaymentMethod, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +69,8 @@ func (r *marketplaceRepo) GetJobByID(ctx context.Context, id string) (*domain.Jo
 
 func (r *marketplaceRepo) CreateJob(ctx context.Context, job *domain.Job) error {
 	_, err := r.db.Exec(ctx,
-		"INSERT INTO jobs (id, customer_id, title, description, category, status, max_budget, is_emergency, location, recurrence_type, total_occurrences, parent_job_id, scheduled_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ST_SetSRID(ST_MakePoint($9, $10), 4326)::geography, $11, $12, $13, $14)",
-		job.ID, job.CustomerID, job.Title, job.Description, job.Category, job.Status, job.MaxBudget, job.IsEmergency, job.Lng, job.Lat, job.RecurrenceType, job.TotalOccurrences, job.ParentJobID, job.ScheduledAt)
+		"INSERT INTO jobs (id, customer_id, title, description, category, status, max_budget, payment_method, is_emergency, location, recurrence_type, total_occurrences, parent_job_id, scheduled_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ST_SetSRID(ST_MakePoint($10, $11), 4326)::geography, $12, $13, $14, $15)",
+		job.ID, job.CustomerID, job.Title, job.Description, job.Category, job.Status, job.MaxBudget, job.PaymentMethod, job.IsEmergency, job.Lng, job.Lat, job.RecurrenceType, job.TotalOccurrences, job.ParentJobID, job.ScheduledAt)
 	if err != nil {
 		log.Printf("[DB ERROR] CreateJob: %v", err)
 		return fmt.Errorf("failed to create job: %w", err)
@@ -203,7 +203,7 @@ func (r *marketplaceRepo) GetBidsByProviderID(ctx context.Context, providerID st
 
 func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID string) ([]domain.Job, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, customer_id, title, description, category, status, max_budget, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at 
+		SELECT id, customer_id, title, description, category, status, max_budget, payment_method, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at
 		FROM jobs 
 		WHERE id IN (SELECT job_id FROM bids WHERE provider_id = $1 AND status = 'ACCEPTED')
 	`, providerID)
@@ -214,7 +214,7 @@ func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID str
 	var jobs []domain.Job
 	for rows.Next() {
 		var j domain.Job
-		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
+		err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.PaymentMethod, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt)
 		if err != nil {
 			continue
 		}

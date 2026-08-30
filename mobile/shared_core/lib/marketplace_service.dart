@@ -8,7 +8,8 @@ class MarketplaceService {
 
   MarketplaceService();
 
-  Future<List<Job>> getJobs({String? category, double? lat, double? lng, double? radius}) async {
+  Future<List<Job>> getJobs(
+      {String? category, double? lat, double? lng, double? radius}) async {
     try {
       final response = await _dio.get('/marketplace/jobs/', queryParameters: {
         if (category != null) 'category': category,
@@ -91,7 +92,8 @@ class MarketplaceService {
 
   Future<bool> acceptBid(String jobId, String bidId) async {
     try {
-      final response = await _dio.post('/marketplace/jobs/$jobId/accept/$bidId');
+      final response =
+          await _dio.post('/marketplace/jobs/$jobId/accept/$bidId');
       return response.statusCode == 200;
     } catch (e) {
       print('Accept bid error: $e');
@@ -112,7 +114,8 @@ class MarketplaceService {
     return false;
   }
 
-  Future<bool> counterOffer(String bidId, double amount, {String? reason}) async {
+  Future<bool> counterOffer(String bidId, double amount,
+      {String? reason}) async {
     try {
       final response = await _dio.post(
         '/marketplace/jobs/bids/$bidId/counter',
@@ -140,7 +143,8 @@ class MarketplaceService {
 
   Future<Map<String, dynamic>?> getInsights(String category) async {
     try {
-      final response = await _dio.get('/marketplace/jobs/insights', queryParameters: {'category': category});
+      final response = await _dio.get('/marketplace/jobs/insights',
+          queryParameters: {'category': category});
       if (response.statusCode == 200) {
         return response.data;
       }
@@ -181,6 +185,7 @@ class MarketplaceService {
     required String description,
     required String category,
     double? maxBudget,
+    required String paymentMethod,
     bool isEmergency = false,
     LatLng? location,
     RecurrenceType recurrenceType = RecurrenceType.once,
@@ -196,6 +201,7 @@ class MarketplaceService {
           'description': description,
           'category': category,
           'max_budget': maxBudget,
+          'payment_method': paymentMethod,
           'is_emergency': isEmergency,
           'lat': location?.latitude ?? 0.0,
           'lng': location?.longitude ?? 0.0,
@@ -210,11 +216,13 @@ class MarketplaceService {
         final json = response.data;
         return Job.fromJson(json);
       } else {
-        print('Create job failed with status: ${response.statusCode}, data: ${response.data}');
+        print(
+            'Create job failed with status: ${response.statusCode}, data: ${response.data}');
       }
     } catch (e) {
       if (e is DioException) {
-        print('Create job DioError: ${e.response?.statusCode} - ${e.response?.data}');
+        print(
+            'Create job DioError: ${e.response?.statusCode} - ${e.response?.data}');
       } else {
         print('Create job error: $e');
       }

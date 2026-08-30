@@ -399,6 +399,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                   ? 'Device Repair > $_deviceType'
                   : '$_category > $_subcategory',
       maxBudget: (double.tryParse(_budget.text) ?? 0) * workers,
+      paymentMethod: switch (_payment) {
+        'Cash on Delivery (after service)' || 'Cash after service' => 'CASH',
+        'GCash' => 'GCASH',
+        'e-wallet (Maya)' => 'MAYA',
+        _ => 'ONLINE',
+      },
       location: location,
       recurrenceType: RecurrenceType.once,
       parentJobId: widget.parentJobId,
@@ -1126,7 +1132,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         DropdownButtonFormField<String>(
           value: _payment,
           hint: const Text('Select Payment Option'),
-          items: const ['e-wallet (Maya)', 'GCash', 'Cash after service']
+          items: const [
+            'e-wallet (Maya)',
+            'GCash',
+            'Cash on Delivery (after service)',
+          ]
               .map(
                   (value) => DropdownMenuItem(value: value, child: Text(value)))
               .toList(),

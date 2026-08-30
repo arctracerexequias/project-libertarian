@@ -12,13 +12,7 @@ enum JobStatus {
   cancelled
 }
 
-enum RecurrenceType {
-  once,
-  daily,
-  weekly,
-  biMonthly,
-  monthly
-}
+enum RecurrenceType { once, daily, weekly, biMonthly, monthly }
 
 class UserProfile {
   final String id;
@@ -28,7 +22,7 @@ class UserProfile {
   final bool isVerified;
   final String bio;
   final List<String> skills;
-  
+
   // Boost related fields
   final LatLng? primaryLocation;
   final LatLng? secondaryLocation;
@@ -67,15 +61,17 @@ class UserProfile {
     this.walletBalance = 0.0,
   });
 
-  bool get isCoverageBoostActive => 
-      coverageBoostEnabled && coverageBoostExpiry != null && coverageBoostExpiry!.isAfter(DateTime.now());
-  
-  bool get isRoamBoostActive => 
+  bool get isCoverageBoostActive =>
+      coverageBoostEnabled &&
+      coverageBoostExpiry != null &&
+      coverageBoostExpiry!.isAfter(DateTime.now());
+
+  bool get isRoamBoostActive =>
       roamBoostExpiry != null && roamBoostExpiry!.isAfter(DateTime.now());
 
-  bool get isTier1Unlocked => 
-      completedJobsCount >= 10 && 
-      averageRating >= 4.2 && 
+  bool get isTier1Unlocked =>
+      completedJobsCount >= 10 &&
+      averageRating >= 4.2 &&
       totalAccumulatedAmount >= 10000;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -88,10 +84,12 @@ class UserProfile {
       bio: json['bio'] ?? '',
       skills: json['skills'] != null ? List<String>.from(json['skills']) : [],
       primaryLocation: (json['lat'] != null && json['lng'] != null)
-          ? LatLng((json['lat'] as num).toDouble(), (json['lng'] as num).toDouble())
+          ? LatLng(
+              (json['lat'] as num).toDouble(), (json['lng'] as num).toDouble())
           : null,
       secondaryLocation: (json['sec_lat'] != null && json['sec_lng'] != null)
-          ? LatLng((json['sec_lat'] as num).toDouble(), (json['sec_lng'] as num).toDouble())
+          ? LatLng((json['sec_lat'] as num).toDouble(),
+              (json['sec_lng'] as num).toDouble())
           : null,
       coverageBoostExpiry: json['coverage_boost_expiry'] != null
           ? DateTime.parse(json['coverage_boost_expiry'])
@@ -102,10 +100,13 @@ class UserProfile {
       coverageBoostEnabled: json['coverage_boost_enabled'] ?? false,
       completedJobsCount: json['completed_jobs_count'] ?? 0,
       averageRating: (json['average_rating'] as num?)?.toDouble() ?? 0.0,
-      totalAccumulatedAmount: (json['total_accumulated_amount'] as num?)?.toDouble() ?? 0.0,
+      totalAccumulatedAmount:
+          (json['total_accumulated_amount'] as num?)?.toDouble() ?? 0.0,
       rebookCount: json['rebook_count'] ?? 0,
       walletBalance: (json['wallet_balance'] as num?)?.toDouble() ?? 0.0,
-      establishment: json['establishment'] != null ? Establishment.fromJson(json['establishment']) : null,
+      establishment: json['establishment'] != null
+          ? Establishment.fromJson(json['establishment'])
+          : null,
     );
   }
 }
@@ -133,11 +134,11 @@ class Establishment {
   }
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'business_type': businessType,
-    'registration_number': registrationNumber,
-    'address': address,
-  };
+        'name': name,
+        'business_type': businessType,
+        'registration_number': registrationNumber,
+        'address': address,
+      };
 }
 
 class Job {
@@ -148,6 +149,7 @@ class Job {
   final String category;
   final JobStatus status;
   final double? maxBudget;
+  final String paymentMethod;
   final LatLng? location;
   final bool isEmergency;
   final RecurrenceType recurrenceType;
@@ -164,6 +166,7 @@ class Job {
     required this.category,
     required this.status,
     this.maxBudget,
+    this.paymentMethod = 'ONLINE',
     this.location,
     this.isEmergency = false,
     this.recurrenceType = RecurrenceType.once,
@@ -182,39 +185,68 @@ class Job {
       category: json['category'],
       status: _parseStatus(json['status']),
       maxBudget: (json['max_budget'] as num?)?.toDouble(),
+      paymentMethod: json['payment_method'] as String? ??
+          _legacyPaymentMethod(json['description'] as String? ?? ''),
       isEmergency: json['is_emergency'] ?? false,
       recurrenceType: _parseRecurrence(json['recurrence_type']),
       totalOccurrences: json['total_occurrences'] ?? 1,
       parentJobId: json['parent_job_id'],
-      scheduledAt: json['scheduled_at'] != null ? DateTime.parse(json['scheduled_at']) : null,
-      location: (json['lat'] != null && json['lng'] != null) 
-          ? LatLng((json['lat'] as num).toDouble(), (json['lng'] as num).toDouble()) 
+      scheduledAt: json['scheduled_at'] != null
+          ? DateTime.parse(json['scheduled_at'])
+          : null,
+      location: (json['lat'] != null && json['lng'] != null)
+          ? LatLng(
+              (json['lat'] as num).toDouble(), (json['lng'] as num).toDouble())
           : null,
       createdAt: DateTime.parse(json['created_at']),
     );
   }
 
+  bool get isCashOnDelivery => paymentMethod.toUpperCase() == 'CASH';
+
+  static String _legacyPaymentMethod(String description) {
+    final normalized = description.toLowerCase();
+    return normalized.contains('payment: cash after service') ||
+            normalized.contains('payment: cash on delivery')
+        ? 'CASH'
+        : 'ONLINE';
+  }
+
   static JobStatus _parseStatus(String status) {
     switch (status.toUpperCase()) {
-      case 'BIDDING': return JobStatus.bidding;
-      case 'PUBLISHED': return JobStatus.published;
-      case 'ACCEPTED': return JobStatus.accepted;
-      case 'EN_ROUTE': return JobStatus.enRoute;
-      case 'IN_PROGRESS': return JobStatus.inProgress;
-      case 'COMPLETED': return JobStatus.completed;
-      case 'DISPUTED': return JobStatus.disputed;
-      case 'CANCELLED': return JobStatus.cancelled;
-      default: return JobStatus.draft;
+      case 'BIDDING':
+        return JobStatus.bidding;
+      case 'PUBLISHED':
+        return JobStatus.published;
+      case 'ACCEPTED':
+        return JobStatus.accepted;
+      case 'EN_ROUTE':
+        return JobStatus.enRoute;
+      case 'IN_PROGRESS':
+        return JobStatus.inProgress;
+      case 'COMPLETED':
+        return JobStatus.completed;
+      case 'DISPUTED':
+        return JobStatus.disputed;
+      case 'CANCELLED':
+        return JobStatus.cancelled;
+      default:
+        return JobStatus.draft;
     }
   }
 
   static RecurrenceType _parseRecurrence(String? type) {
     switch (type?.toUpperCase()) {
-      case 'DAILY': return RecurrenceType.daily;
-      case 'WEEKLY': return RecurrenceType.weekly;
-      case 'BI_MONTHLY': return RecurrenceType.biMonthly;
-      case 'MONTHLY': return RecurrenceType.monthly;
-      default: return RecurrenceType.once;
+      case 'DAILY':
+        return RecurrenceType.daily;
+      case 'WEEKLY':
+        return RecurrenceType.weekly;
+      case 'BI_MONTHLY':
+        return RecurrenceType.biMonthly;
+      case 'MONTHLY':
+        return RecurrenceType.monthly;
+      default:
+        return RecurrenceType.once;
     }
   }
 }
@@ -290,15 +322,15 @@ class ChatMessage {
       jobId: json['job_id'] ?? '',
       senderId: json['sender_id'] ?? '',
       content: json['content'] ?? '',
-      timestamp: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
+      timestamp: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
           : DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'job_id': jobId,
-    'sender_id': senderId,
-    'content': content,
-  };
+        'job_id': jobId,
+        'sender_id': senderId,
+        'content': content,
+      };
 }

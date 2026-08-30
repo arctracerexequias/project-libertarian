@@ -38,6 +38,7 @@ func (s *marketplaceService) PostJob(ctx context.Context, customerID string, req
 		Category:         req.Category,
 		Status:           "PUBLISHED",
 		MaxBudget:        req.MaxBudget,
+		PaymentMethod:    req.PaymentMethod,
 		IsEmergency:      req.IsEmergency,
 		Lat:              req.Lat,
 		Lng:              req.Lng,
@@ -55,6 +56,9 @@ func (s *marketplaceService) PostJob(ctx context.Context, customerID string, req
 	}
 	if job.RecurrenceType == "" {
 		job.RecurrenceType = "ONCE"
+	}
+	if job.PaymentMethod == "" {
+		job.PaymentMethod = "ONLINE"
 	}
 	err := s.repo.CreateJob(ctx, job)
 	return job, err
@@ -112,35 +116,39 @@ func (s *marketplaceService) UpdateJobStatus(ctx context.Context, jobID string, 
 }
 
 func (s *marketplaceService) CancelJob(ctx context.Context, jobID string, userID string) error {
-	err := s.repo.CancelJob(ctx, jobID, userID)
+	job, err := s.repo.GetJobByID(ctx, jobID)
 	if err != nil {
 		return err
 	}
 
-	// Trigger refund in payment service
-	paymentServiceURL := os.Getenv("PAYMENT_SERVICE_URL")
-	if paymentServiceURL == "" {
-		paymentServiceURL = "http://payment-service:8084"
+	err = s.repo.CancelJob(ctx, jobID, userID)
+	if err != nil {
+		return err
 	}
-
-	payload := map[string]string{"job_id": jobID}
-	jsonPayload, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/escrow/refund", paymentServiceURL), bytes.NewBuffer(jsonPayload))
-	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		// Log error but don't fail job cancellation if payment service is down
-		// In production, we'd use a retry mechanism or an event bus
-		fmt.Printf("Warning: Failed to trigger refund for job %s: %v\n", jobID, err)
-		return nil
-	}
-	defer resp.Body.Close()
+	if job.PaymentMethod != "CASH" {
+		// Cash jobs never create an escrow transaction, so there is nothing to refund.
+		paymentServiceURL := os.Getenv("PAYMENT_SERVICE_URL")
+		if paymentServiceURL == "" {
+			paymentServiceURL = "http://payment-service:8084"
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Warning: Payment service returned status %d for refund of job %s\n", resp.StatusCode, jobID)
+		payload := map[string]string{"job_id": jobID}
+		jsonPayload, _ := json.Marshal(payload)
+		req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/escrow/refund", paymentServiceURL), bytes.NewBuffer(jsonPayload))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, refundErr := client.Do(req)
+		if refundErr != nil {
+			// Cancellation remains successful when the optional refund notification fails.
+			fmt.Printf("Warning: Failed to trigger refund for job %s: %v\n", jobID, refundErr)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				fmt.Printf("Warning: Payment service returned status %d for refund of job %s\n", resp.StatusCode, jobID)
+			}
+		}
 	}
 
 	// Notify communication service
