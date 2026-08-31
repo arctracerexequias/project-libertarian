@@ -107,6 +107,10 @@ func (s *marketplaceService) ListProviderJobs(ctx context.Context, providerID st
 	return s.repo.GetJobsForProvider(ctx, providerID)
 }
 
+func (s *marketplaceService) ListCustomerJobs(ctx context.Context, customerID string) ([]domain.Job, error) {
+	return s.repo.GetJobsForCustomer(ctx, customerID)
+}
+
 func (s *marketplaceService) GetInsights(ctx context.Context, category string) (float64, int, error) {
 	return s.repo.GetCategoryInsights(ctx, category)
 }

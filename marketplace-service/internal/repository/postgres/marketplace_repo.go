@@ -226,6 +226,32 @@ func (r *marketplaceRepo) GetJobsForProvider(ctx context.Context, providerID str
 	return jobs, nil
 }
 
+func (r *marketplaceRepo) GetJobsForCustomer(ctx context.Context, customerID string) ([]domain.Job, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, customer_id, title, description, category, status, max_budget, payment_method, is_emergency, ST_Y(location::geometry), ST_X(location::geometry), recurrence_type, total_occurrences, parent_job_id, scheduled_at, created_at
+		FROM jobs
+		WHERE customer_id = $1
+		ORDER BY created_at DESC
+	`, customerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch customer jobs: %w", err)
+	}
+	defer rows.Close()
+
+	jobs := []domain.Job{}
+	for rows.Next() {
+		var j domain.Job
+		if err := rows.Scan(&j.ID, &j.CustomerID, &j.Title, &j.Description, &j.Category, &j.Status, &j.MaxBudget, &j.PaymentMethod, &j.IsEmergency, &j.Lat, &j.Lng, &j.RecurrenceType, &j.TotalOccurrences, &j.ParentJobID, &j.ScheduledAt, &j.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan customer job: %w", err)
+		}
+		jobs = append(jobs, j)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read customer jobs: %w", err)
+	}
+	return jobs, nil
+}
+
 func (r *marketplaceRepo) GetCategoryInsights(ctx context.Context, category string) (float64, int, error) {
 	var avg float64
 	var count int

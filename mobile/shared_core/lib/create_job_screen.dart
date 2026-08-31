@@ -86,6 +86,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   int get _reviewStep => _isSpecialized ? 4 : 2;
   int get _resultStep => _isSpecialized ? 5 : 3;
 
+  double? get _offerAmount => double.tryParse(
+        _budget.text.replaceAll('₱', '').replaceAll(',', '').trim(),
+      );
+
+  int? get _workerCount => int.tryParse(_workers.text.trim());
+
   static const _subcategories = <String, List<String>>{
     'Home Repair': [
       'Carpentry',
@@ -303,11 +309,20 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       }
     }
     if (_step == detailsStep) {
-      if (_title.text.trim().isEmpty ||
-          _description.text.trim().length < 10 ||
-          (double.tryParse(_budget.text) ?? 0) <= 0 ||
-          (int.tryParse(_workers.text) ?? 0) <= 0) {
-        _message('Complete all job details with a valid offer and workers.');
+      if (_title.text.trim().isEmpty) {
+        _message('Enter a title for the job.');
+        return false;
+      }
+      if (_description.text.trim().length < 10) {
+        _message('Describe the job using at least 10 characters.');
+        return false;
+      }
+      if ((_offerAmount ?? 0) <= 0) {
+        _message('Enter a valid offer amount greater than zero.');
+        return false;
+      }
+      if (!_isSpecialized && (_workerCount ?? 0) <= 0) {
+        _message('Enter a valid number of workers.');
         return false;
       }
     }
@@ -356,7 +371,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
     final location = await _resolveLocation();
-    final workers = int.tryParse(_workers.text) ?? 1;
+    final workers = _isSpecialized ? 1 : (_workerCount ?? 1);
     final details = [
       _description.text.trim(),
       '',
@@ -398,7 +413,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               : _isDeviceRepair
                   ? 'Device Repair > $_deviceType'
                   : '$_category > $_subcategory',
-      maxBudget: (double.tryParse(_budget.text) ?? 0) * workers,
+      maxBudget: (_offerAmount ?? 0) * workers,
       paymentMethod: switch (_payment) {
         'Cash on Delivery (after service)' || 'Cash after service' => 'CASH',
         'GCash' => 'GCASH',
@@ -1062,8 +1077,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   }
 
   Widget _buildReviewStep() {
-    final workers = int.tryParse(_workers.text) ?? 1;
-    final each = double.tryParse(_budget.text) ?? 0;
+    final workers = _isSpecialized ? 1 : (_workerCount ?? 1);
+    final each = _offerAmount ?? 0;
     return Column(
       children: [
         _ClientSummary(
@@ -1074,9 +1089,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         if (!_isSpecialized) ...[
           const SizedBox(height: 8),
           Text(
-            '${int.tryParse(_workers.text) ?? 1} worker(s) • '
-            '₱${(double.tryParse(_budget.text) ?? 0).toStringAsFixed(0)} each • '
-            '₱${((int.tryParse(_workers.text) ?? 1) * (double.tryParse(_budget.text) ?? 0)).toStringAsFixed(0)} via $_payment',
+            '${_workerCount ?? 1} worker(s) • '
+            '₱${(_offerAmount ?? 0).toStringAsFixed(0)} each • '
+            '₱${((_workerCount ?? 1) * (_offerAmount ?? 0)).toStringAsFixed(0)} via $_payment',
             textAlign: TextAlign.center,
             style:
                 const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),
@@ -1230,9 +1245,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         if (!_isSpecialized) ...[
           const SizedBox(height: 8),
           Text(
-            '${int.tryParse(_workers.text) ?? 1} worker(s) • '
-            '₱${(double.tryParse(_budget.text) ?? 0).toStringAsFixed(0)} each • '
-            '₱${((int.tryParse(_workers.text) ?? 1) * (double.tryParse(_budget.text) ?? 0)).toStringAsFixed(0)} via $_payment',
+            '${_workerCount ?? 1} worker(s) • '
+            '₱${(_offerAmount ?? 0).toStringAsFixed(0)} each • '
+            '₱${((_workerCount ?? 1) * (_offerAmount ?? 0)).toStringAsFixed(0)} via $_payment',
             textAlign: TextAlign.center,
             style:
                 const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),
@@ -1241,7 +1256,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         if (_isApplianceRepair || _isDeviceRepair) ...[
           const SizedBox(height: 8),
           Text(
-            'Offer Amount: ₱${(double.tryParse(_budget.text) ?? 0).toStringAsFixed(0)} via $_payment',
+            'Offer Amount: ₱${(_offerAmount ?? 0).toStringAsFixed(0)} via $_payment',
             textAlign: TextAlign.center,
             style:
                 const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),

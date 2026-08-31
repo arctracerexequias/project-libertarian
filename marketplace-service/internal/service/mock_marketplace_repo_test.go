@@ -95,6 +95,16 @@ func (m *mockMarketplaceRepo) GetJobsForProvider(ctx context.Context, providerID
 	return m.jobs, nil
 }
 
+func (m *mockMarketplaceRepo) GetJobsForCustomer(ctx context.Context, customerID string) ([]domain.Job, error) {
+	res := []domain.Job{}
+	for _, job := range m.jobs {
+		if job.CustomerID == customerID {
+			res = append(res, job)
+		}
+	}
+	return res, nil
+}
+
 func (m *mockMarketplaceRepo) GetCategoryInsights(ctx context.Context, category string) (float64, int, error) {
 	return 100.0, 1, nil
 }

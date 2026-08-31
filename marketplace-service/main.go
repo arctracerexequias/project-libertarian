@@ -51,6 +51,7 @@ func main() {
 		jobRoutes.POST("/:id/cancel", handler.CancelJob)
 		jobRoutes.GET("/provider/bids", handler.GetProviderBids)
 		jobRoutes.GET("/provider/jobs", handler.GetProviderJobs)
+		jobRoutes.GET("/customer/jobs", handler.GetCustomerJobs)
 		jobRoutes.GET("/insights", handler.GetInsights)
 	}
 

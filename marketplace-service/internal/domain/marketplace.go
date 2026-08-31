@@ -86,6 +86,7 @@ type MarketplaceRepository interface {
 	CompleteJob(ctx context.Context, jobID, userID string, score int, comment string) error
 	GetBidsByProviderID(ctx context.Context, providerID string) ([]Bid, error)
 	GetJobsForProvider(ctx context.Context, providerID string) ([]Job, error)
+	GetJobsForCustomer(ctx context.Context, customerID string) ([]Job, error)
 	GetCategoryInsights(ctx context.Context, category string) (float64, int, error)
 	UpdateJobStatus(ctx context.Context, jobID string, status string) error
 	CancelJob(ctx context.Context, jobID string, userID string) error
@@ -103,6 +104,7 @@ type MarketplaceService interface {
 	MarkComplete(ctx context.Context, jobID, userID string, req CompleteJobRequest) error
 	ListProviderBids(ctx context.Context, providerID string) ([]Bid, error)
 	ListProviderJobs(ctx context.Context, providerID string) ([]Job, error)
+	ListCustomerJobs(ctx context.Context, customerID string) ([]Job, error)
 	GetInsights(ctx context.Context, category string) (float64, int, error)
 	UpdateJobStatus(ctx context.Context, jobID string, status string) error
 	CancelJob(ctx context.Context, jobID string, userID string) error

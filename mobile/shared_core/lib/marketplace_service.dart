@@ -180,6 +180,19 @@ class MarketplaceService {
     return [];
   }
 
+  Future<List<Job>> getCustomerJobs() async {
+    try {
+      final response = await _dio.get('/marketplace/jobs/customer/jobs');
+      if (response.statusCode == 200) {
+        final List jobsData = response.data['jobs'];
+        return jobsData.map((json) => Job.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Get customer jobs error: $e');
+    }
+    return [];
+  }
+
   Future<Job?> createJob({
     required String title,
     required String description,
@@ -208,7 +221,9 @@ class MarketplaceService {
           'recurrence_type': recurrenceType.name.toUpperCase(),
           'total_occurrences': totalOccurrences,
           'parent_job_id': parentJobId,
-          'scheduled_at': scheduledAt?.toIso8601String(),
+          // Go's time.Time JSON parser requires RFC 3339, including a timezone.
+          // Dart omits the offset for local DateTime values, so send UTC (`Z`).
+          'scheduled_at': scheduledAt?.toUtc().toIso8601String(),
         },
       );
 

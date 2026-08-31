@@ -649,7 +649,7 @@ class _CustomerHistoryScreenState extends State<CustomerHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _jobs = _marketplaceService.getJobs();
+    _jobs = _marketplaceService.getCustomerJobs();
     widget.refreshSignal?.addListener(_handleExternalRefresh);
   }
 
@@ -673,7 +673,7 @@ class _CustomerHistoryScreenState extends State<CustomerHistoryScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _jobs = _marketplaceService.getJobs());
+    setState(() => _jobs = _marketplaceService.getCustomerJobs());
     await _jobs;
   }
 

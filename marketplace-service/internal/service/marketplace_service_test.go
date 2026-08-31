@@ -81,6 +81,27 @@ func TestMarketplaceService_CancelCashJobSkipsRefund(t *testing.T) {
 	}
 }
 
+func TestMarketplaceService_ListCustomerJobsIncludesAllStatuses(t *testing.T) {
+	repo := newMockMarketplaceRepo()
+	repo.jobs = []domain.Job{
+		{ID: "published-job", CustomerID: "customer-1", Status: "PUBLISHED"},
+		{ID: "completed-job", CustomerID: "customer-1", Status: "COMPLETED"},
+		{ID: "other-customer-job", CustomerID: "customer-2", Status: "PUBLISHED"},
+	}
+
+	svc := NewMarketplaceService(repo)
+	jobs, err := svc.ListCustomerJobs(context.Background(), "customer-1")
+	if err != nil {
+		t.Fatalf("Failed to list customer jobs: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("Expected 2 customer-owned jobs, got %d", len(jobs))
+	}
+	if jobs[1].Status != "COMPLETED" {
+		t.Errorf("Expected completed job to remain in history, got %s", jobs[1].Status)
+	}
+}
+
 func TestMarketplaceService_PlaceBid(t *testing.T) {
 	repo := newMockMarketplaceRepo()
 	svc := NewMarketplaceService(repo)
