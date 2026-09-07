@@ -2,34 +2,71 @@ package service
 
 import (
 	"context"
-
 	"github.com/service-marketplace/payment-service/internal/domain"
+	"sync"
 )
 
 type mockPaymentRepo struct {
-	transactions map[string]*domain.Transaction
+	mu  sync.Mutex
+	job domain.PaymentJob
+	tx  *domain.Transaction
 }
 
 func newMockPaymentRepo() *mockPaymentRepo {
-	return &mockPaymentRepo{transactions: make(map[string]*domain.Transaction)}
+	return &mockPaymentRepo{job: domain.PaymentJob{ID: "job", CustomerID: "customer", ProviderID: "provider", Status: "ACCEPTED", PaymentMethod: "ONLINE", AmountMinor: 125050}}
 }
-
-func (m *mockPaymentRepo) CreateTransaction(ctx context.Context, tx *domain.Transaction) error {
-	m.transactions[tx.JobID] = tx
+func (m *mockPaymentRepo) WithJob(ctx context.Context, id string, fn func(domain.PaymentJob, domain.PaymentStore) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return fn(m.job, m)
+}
+func (m *mockPaymentRepo) Get(context.Context) (*domain.Transaction, error) {
+	if m.tx == nil {
+		return nil, nil
+	}
+	copy := *m.tx
+	return &copy, nil
+}
+func (m *mockPaymentRepo) Save(_ context.Context, t *domain.Transaction) error {
+	copy := *t
+	m.tx = &copy
 	return nil
 }
-
-func (m *mockPaymentRepo) GetTransactionByJobID(ctx context.Context, jobID string) (*domain.Transaction, error) {
-	if tx, ok := m.transactions[jobID]; ok {
-		return tx, nil
-	}
-	return nil, context.DeadlineExceeded
+func (m *mockPaymentRepo) ReconciliationJobs(context.Context) ([]string, error) {
+	return []string{m.job.ID}, nil
 }
 
-func (m *mockPaymentRepo) UpdateTransactionStatus(ctx context.Context, jobID, status string) error {
-	if tx, ok := m.transactions[jobID]; ok {
-		tx.Status = status
-		return nil
+type mockProvider struct {
+	created, captured, refunded int
+	failure                     error
+	checkout                    domain.Checkout
+	keys                        []string
+}
+
+func (m *mockProvider) CreateCheckout(_ context.Context, t *domain.Transaction) (domain.Checkout, error) {
+	m.created++
+	m.keys = append(m.keys, t.ID)
+	if m.failure != nil {
+		return domain.Checkout{}, m.failure
 	}
-	return context.DeadlineExceeded
+	m.checkout = domain.Checkout{ID: "cs_1", URL: "https://checkout.stripe.com/test", IntentID: "pi_1", Status: "PENDING", AmountMinor: t.AmountMinor, Currency: t.Currency}
+	return m.checkout, nil
+}
+func (m *mockProvider) Checkout(context.Context, string) (domain.Checkout, error) {
+	return m.checkout, m.failure
+}
+func (m *mockProvider) Capture(context.Context, string, string) error {
+	if m.failure != nil {
+		return m.failure
+	}
+	m.captured++
+	m.checkout.Status = "RELEASED"
+	return nil
+}
+func (m *mockProvider) Refund(context.Context, string, string, string) error {
+	if m.failure != nil {
+		return m.failure
+	}
+	m.refunded++
+	return nil
 }

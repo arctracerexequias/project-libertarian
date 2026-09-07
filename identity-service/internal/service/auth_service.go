@@ -20,7 +20,7 @@ type authService struct {
 func NewAuthService(repo domain.UserRepository) domain.AuthService {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "super_secret_jwt_key_for_development"
+		panic("JWT_SECRET is required")
 	}
 	return &authService{
 		repo:   repo,
@@ -29,6 +29,9 @@ func NewAuthService(repo domain.UserRepository) domain.AuthService {
 }
 
 func (s *authService) Register(ctx context.Context, req domain.RegisterRequest) (string, error) {
+	if req.Role != "customer" && req.Role != "provider" {
+		return "", fmt.Errorf("invalid registration role")
+	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", fmt.Errorf("failed to hash password: %w", err)
@@ -89,23 +92,31 @@ func (s *authService) UpdateProfile(ctx context.Context, userID string, fullName
 	return s.repo.Update(ctx, user)
 }
 
-func (s *authService) VerifyUser(ctx context.Context, userID string, isVerified bool) error {
-	user, err := s.repo.GetByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	user.IsVerified = isVerified
-	return s.repo.Update(ctx, user)
-}
-
 func (s *authService) PurchaseCoverageBoost(ctx context.Context, userID string, durationDays int) error {
+	if durationDays != 7 {
+		return fmt.Errorf("only seven-day boosts are available")
+	}
 	return s.repo.SetCoverageBoost(ctx, userID, durationDays)
 }
 
 func (s *authService) PurchaseRoamBoost(ctx context.Context, userID string, durationDays int) error {
+	if durationDays != 7 {
+		return fmt.Errorf("only seven-day boosts are available")
+	}
 	return s.repo.SetRoamBoost(ctx, userID, durationDays)
 }
 
 func (s *authService) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
 	return s.repo.ToggleCoverageBoost(ctx, userID, active)
+}
+
+func (s *authService) RequestVerification(ctx context.Context, userID string) error {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.Role != "provider" {
+		return fmt.Errorf("only providers can request verification")
+	}
+	return s.repo.RequestVerification(ctx, userID)
 }

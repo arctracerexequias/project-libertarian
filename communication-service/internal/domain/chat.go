@@ -14,11 +14,13 @@ type Message struct {
 }
 
 type ChatRepository interface {
+	IsParticipant(ctx context.Context, jobID, userID string) (bool, error)
 	SaveMessage(ctx context.Context, msg *Message) error
 	GetMessagesByJob(ctx context.Context, jobID string) ([]Message, error)
 }
 
 type ChatService interface {
+	Authorize(ctx context.Context, jobID, userID string) error
 	SendMessage(ctx context.Context, jobID, senderID, content string) (*Message, error)
-	GetChatHistory(ctx context.Context, jobID string) ([]Message, error)
+	GetChatHistory(ctx context.Context, jobID, userID string) ([]Message, error)
 }

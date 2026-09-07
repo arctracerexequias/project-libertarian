@@ -4,7 +4,6 @@ import 'auth_service.dart';
 import 'models.dart';
 import 'biometric_service.dart';
 
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -101,9 +100,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _saveProfile() async {
     if (_profile == null) return;
     setState(() => _isLoading = true);
-    
+
     // Update logic would need to handle establishment in a real app
-    await _authService.updateProfile(_profile!.fullName, _profile!.bio, _profile!.skills);
+    await _authService.updateProfile(
+        _profile!.fullName, _profile!.bio, _profile!.skills);
     await _loadProfile();
   }
 
@@ -113,10 +113,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Top Up Wallet'),
-        content: const Text('Connect your GCash or Maya to ensure daily commissions are covered for long-term bookings.'),
+        content: const Text(
+            'Connect your GCash or Maya to ensure daily commissions are covered for long-term bookings.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Link GCash')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Link GCash')),
         ],
       ),
     );
@@ -124,8 +128,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    
+    if (_isLoading)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
     if (_profile == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('My Profile')),
@@ -135,9 +140,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 16),
-              const Text('Error loading profile.', style: TextStyle(fontSize: 18)),
+              const Text('Error loading profile.',
+                  style: TextStyle(fontSize: 18)),
               const SizedBox(height: 24),
-              ElevatedButton(onPressed: _loadProfile, child: const Text('Retry')),
+              ElevatedButton(
+                  onPressed: _loadProfile, child: const Text('Retry')),
             ],
           ),
         ),
@@ -188,7 +195,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CircleAvatar(
               radius: 50,
               backgroundColor: Colors.indigo,
-              child: Text(_profile!.fullName.substring(0, 1), style: const TextStyle(fontSize: 40, color: Colors.white)),
+              child: Text(_profile!.fullName.substring(0, 1),
+                  style: const TextStyle(fontSize: 40, color: Colors.white)),
             ),
             if (_profile!.isVerified)
               const Positioned(
@@ -203,7 +211,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        Text(_profile!.fullName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        Text(_profile!.fullName,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         Text(_profile!.email, style: const TextStyle(color: Colors.grey)),
       ],
     );
@@ -212,12 +221,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatsCard() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.orange.shade100)),
+      decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.orange.shade100)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildStatItem('Jobs', _profile!.completedJobsCount.toString()),
-          _buildStatItem('Rating', '${_profile!.averageRating.toStringAsFixed(1)} ★'),
+          _buildStatItem(
+              'Rating', '${_profile!.averageRating.toStringAsFixed(1)} ★'),
           _buildStatItem('Rebooks', _profile!.rebookCount.toString()),
         ],
       ),
@@ -227,7 +240,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatItem(String label, String value) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange)),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange)),
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
@@ -240,18 +257,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.account_balance_wallet, color: Colors.white)),
+            const CircleAvatar(
+                backgroundColor: Colors.green,
+                child: Icon(Icons.account_balance_wallet, color: Colors.white)),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Platform Balance', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  Text('₱${_profile!.walletBalance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text('Platform Balance',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text('₱${_profile!.walletBalance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
-            ElevatedButton(onPressed: _topUpWallet, style: ElevatedButton.styleFrom(backgroundColor: Colors.green), child: const Text('Top Up')),
+            ElevatedButton(
+                onPressed: _topUpWallet,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                child: const Text('Top Up')),
           ],
         ),
       ),
@@ -262,31 +287,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('General Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text('General Information',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         TextFormField(
           initialValue: _profile!.fullName,
-          decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+              labelText: 'Full Name', border: OutlineInputBorder()),
           onChanged: (val) => _profile = UserProfile(
-            id: _profile!.id, fullName: val, email: _profile!.email, role: _profile!.role,
-            isVerified: _profile!.isVerified, bio: _profile!.bio, skills: _profile!.skills,
-            completedJobsCount: _profile!.completedJobsCount, averageRating: _profile!.averageRating,
-            rebookCount: _profile!.rebookCount, walletBalance: _profile!.walletBalance,
-            establishment: _profile!.establishment
-          ),
+              id: _profile!.id,
+              fullName: val,
+              email: _profile!.email,
+              role: _profile!.role,
+              isVerified: _profile!.isVerified,
+              bio: _profile!.bio,
+              skills: _profile!.skills,
+              completedJobsCount: _profile!.completedJobsCount,
+              averageRating: _profile!.averageRating,
+              rebookCount: _profile!.rebookCount,
+              walletBalance: _profile!.walletBalance,
+              establishment: _profile!.establishment),
         ),
         const SizedBox(height: 16),
         TextFormField(
           initialValue: _profile!.bio,
-          decoration: const InputDecoration(labelText: 'Bio / Description', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+              labelText: 'Bio / Description', border: OutlineInputBorder()),
           maxLines: 3,
           onChanged: (val) => _profile = UserProfile(
-            id: _profile!.id, fullName: _profile!.fullName, email: _profile!.email, role: _profile!.role,
-            isVerified: _profile!.isVerified, bio: val, skills: _profile!.skills,
-            completedJobsCount: _profile!.completedJobsCount, averageRating: _profile!.averageRating,
-            rebookCount: _profile!.rebookCount, walletBalance: _profile!.walletBalance,
-            establishment: _profile!.establishment
-          ),
+              id: _profile!.id,
+              fullName: _profile!.fullName,
+              email: _profile!.email,
+              role: _profile!.role,
+              isVerified: _profile!.isVerified,
+              bio: val,
+              skills: _profile!.skills,
+              completedJobsCount: _profile!.completedJobsCount,
+              averageRating: _profile!.averageRating,
+              rebookCount: _profile!.rebookCount,
+              walletBalance: _profile!.walletBalance,
+              establishment: _profile!.establishment),
         ),
       ],
     );
@@ -296,15 +336,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Business Establishment', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text('Business Establishment',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        TextField(controller: _estNameController, decoration: const InputDecoration(labelText: 'Shop Name (e.g. Juan Repair Shop)', border: OutlineInputBorder())),
+        TextField(
+            controller: _estNameController,
+            decoration: const InputDecoration(
+                labelText: 'Shop Name (e.g. Juan Repair Shop)',
+                border: OutlineInputBorder())),
         const SizedBox(height: 12),
-        TextField(controller: _estTypeController, decoration: const InputDecoration(labelText: 'Business Type (e.g. Automotive, Salon)', border: OutlineInputBorder())),
+        TextField(
+            controller: _estTypeController,
+            decoration: const InputDecoration(
+                labelText: 'Business Type (e.g. Automotive, Salon)',
+                border: OutlineInputBorder())),
         const SizedBox(height: 12),
-        TextField(controller: _estRegController, decoration: const InputDecoration(labelText: 'Registration Number', border: OutlineInputBorder())),
+        TextField(
+            controller: _estRegController,
+            decoration: const InputDecoration(
+                labelText: 'Registration Number',
+                border: OutlineInputBorder())),
         const SizedBox(height: 12),
-        TextField(controller: _estAddrController, decoration: const InputDecoration(labelText: 'Physical Address', border: OutlineInputBorder())),
+        TextField(
+            controller: _estAddrController,
+            decoration: const InputDecoration(
+                labelText: 'Physical Address', border: OutlineInputBorder())),
       ],
     );
   }
@@ -313,7 +369,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Service Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text('Service Categories',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -342,7 +399,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Security Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text('Security Settings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (_biometricsSupported) ...[
           if (_profile!.role == 'customer') ...[
@@ -356,14 +414,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 },
               )
             else
-              const ListTile(title: Text('Biometric Login'), subtitle: Text('Verification required'), trailing: Icon(Icons.lock_outline, color: Colors.grey)),
+              const ListTile(
+                  title: Text('Biometric Login'),
+                  subtitle: Text('Verification required'),
+                  trailing: Icon(Icons.lock_outline, color: Colors.grey)),
           ] else ...[
-            const ListTile(title: Text('Biometric Security'), subtitle: Text('Mandatory Lock Enabled'), trailing: Icon(Icons.lock, color: Colors.green)),
+            const ListTile(
+                title: Text('Biometric Security'),
+                subtitle: Text('Mandatory Lock Enabled'),
+                trailing: Icon(Icons.lock, color: Colors.green)),
           ],
         ],
         if (!_profile!.isVerified) ...[
           const SizedBox(height: 16),
-          SizedBox(width: double.infinity, child: ElevatedButton.icon(icon: const Icon(Icons.verified_user), label: const Text('Request Verification'), onPressed: _requestVerification, style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white))),
+          SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                  icon: const Icon(Icons.verified_user),
+                  label: const Text('Request Verification'),
+                  onPressed: _requestVerification,
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white))),
         ],
       ],
     );
@@ -378,7 +450,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onPressed: () async {
           await _biometricService.clearSettings();
           await _authService.logout();
-          if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+          if (mounted)
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/', (route) => false);
         },
       ),
     );
@@ -386,10 +460,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _requestVerification() async {
     setState(() => _isLoading = true);
-    final success = await _authService.verifyMe();
+    final success = await _authService.requestVerification();
+    if (mounted) setState(() => _isLoading = false);
     if (success) {
       await _loadProfile();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification approved!')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Verification request submitted for review.')));
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Could not submit verification request. Please try again.')));
     }
   }
 }

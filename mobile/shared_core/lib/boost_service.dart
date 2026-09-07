@@ -6,9 +6,8 @@ class BoostService {
 
   Future<bool> purchaseCoverageBoost() async {
     try {
-      // Mock payment delay
-      await Future.delayed(const Duration(seconds: 2));
-      final response = await _dio.post('/identity/auth/boost/coverage');
+      final response = await _dio
+          .post('/identity/auth/boost/coverage', data: {'duration_days': 7});
       return response.statusCode == 200;
     } catch (e) {
       print('Purchase coverage boost error: $e');
@@ -18,9 +17,8 @@ class BoostService {
 
   Future<bool> purchaseRoamBoost() async {
     try {
-      // Mock payment delay
-      await Future.delayed(const Duration(seconds: 2));
-      final response = await _dio.post('/identity/auth/boost/roam');
+      final response = await _dio
+          .post('/identity/auth/boost/roam', data: {'duration_days': 7});
       return response.statusCode == 200;
     } catch (e) {
       print('Purchase roam boost error: $e');
@@ -30,8 +28,9 @@ class BoostService {
 
   Future<bool> toggleCoverageBoost(bool enabled) async {
     try {
-      final response = await _dio.post('/identity/auth/boost/coverage/toggle', data: {
-        'enabled': enabled,
+      final response =
+          await _dio.post('/identity/auth/boost/coverage/toggle', data: {
+        'active': enabled,
       });
       return response.statusCode == 200;
     } catch (e) {

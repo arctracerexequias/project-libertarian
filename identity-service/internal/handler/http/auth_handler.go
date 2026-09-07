@@ -97,13 +97,13 @@ func (h *AuthHandler) VerifyMe(c *gin.Context) {
 		return
 	}
 
-	err := h.service.VerifyUser(c.Request.Context(), userID, true)
+	_, err := h.service.GetProfile(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify user"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User verified successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Session is valid"})
 }
 
 func (h *AuthHandler) PurchaseCoverageBoost(c *gin.Context) {
@@ -173,4 +173,12 @@ func (h *AuthHandler) ToggleCoverageBoost(c *gin.Context) {
 		status = "activated"
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Coverage boost " + status})
+}
+
+func (h *AuthHandler) RequestVerification(c *gin.Context) {
+	if err := h.service.RequestVerification(c.Request.Context(), middleware.GetUserID(c)); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(202, gin.H{"message": "Verification request submitted for review"})
 }

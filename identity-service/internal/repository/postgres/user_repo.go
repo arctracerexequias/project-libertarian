@@ -130,6 +130,7 @@ func (r *userRepo) fetchProviderMetrics(ctx context.Context, user *domain.User) 
 		user.Establishment = &est
 	}
 
+	r.db.QueryRow(ctx, "SELECT coverage_boost_expires_at,roam_boost_expires_at,coverage_boost_enabled FROM providers WHERE user_id=$1", user.ID).Scan(&user.CoverageBoostExpiry, &user.RoamBoostExpiry, &user.CoverageBoostEnabled)
 	// 4. Fetch Wallet Balance
 	r.db.QueryRow(ctx, "SELECT balance FROM provider_wallets WHERE provider_id = $1", user.ID).Scan(&user.WalletBalance)
 }
@@ -142,79 +143,82 @@ func (r *userRepo) Update(ctx context.Context, user *domain.User) error {
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx,
-		"UPDATE users SET full_name = $1, bio = $2, skills = $3, is_verified = $4 WHERE id = $5",
-		user.FullName, user.Bio, user.Skills, user.IsVerified, user.ID)
+		"UPDATE users SET full_name = $1, bio = $2, skills = $3 WHERE id = $4",
+		user.FullName, user.Bio, user.Skills, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
 	if user.Role == "provider" {
 		_, err = tx.Exec(ctx,
-			"INSERT INTO providers (user_id, bio, skills, reputation_score, is_verified) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id) DO UPDATE SET bio = $2, skills = $3, is_verified = $5",
-			user.ID, user.Bio, user.Skills, 5.0, user.IsVerified)
+			"UPDATE providers SET bio=$2, skills=$3 WHERE user_id=$1",
+			user.ID, user.Bio, user.Skills)
 		if err != nil {
 			return fmt.Errorf("failed to update provider record: %w", err)
 		}
 
-		// Update or Insert Establishment
-		if user.Establishment != nil {
-			_, err = tx.Exec(ctx, `
-				INSERT INTO establishments (provider_id, name, business_type, registration_number, address)
-				VALUES ($1, $2, $3, $4, $5)
-				ON CONFLICT (id) DO UPDATE SET name = $2, business_type = $3, registration_number = $4, address = $5
-			`, user.ID, user.Establishment.Name, user.Establishment.BusinessType, user.Establishment.RegistrationNumber, user.Establishment.Address)
-			if err != nil {
-				return fmt.Errorf("failed to update establishment: %w", err)
-			}
-		}
-
-		// Update Wallet Balance (for top-ups)
-		if user.WalletBalance > 0 {
-			_, err = tx.Exec(ctx, "UPDATE provider_wallets SET balance = balance + $1 WHERE provider_id = $2", user.WalletBalance, user.ID)
-			if err != nil {
-				return fmt.Errorf("failed to update wallet balance: %w", err)
-			}
-		}
 	}
 
 	return tx.Commit(ctx)
 }
 
-func (r *userRepo) SetCoverageBoost(ctx context.Context, userID string, durationDays int) error {
-	_, err := r.db.Exec(ctx,
-		"UPDATE providers SET coverage_boost_expires_at = NOW() + ($1 * INTERVAL '1 day') WHERE user_id = $2",
-		durationDays, userID)
-	if err != nil {
-		return fmt.Errorf("failed to set coverage boost: %w", err)
+func (r *userRepo) purchaseBoost(ctx context.Context, userID, kind string, days int) error {
+	if days != 7 {
+		return fmt.Errorf("only seven-day boosts are available")
 	}
-	return nil
-}
-
-func (r *userRepo) SetRoamBoost(ctx context.Context, userID string, durationDays int) error {
-	_, err := r.db.Exec(ctx,
-		"UPDATE providers SET roam_boost_expires_at = NOW() + ($1 * INTERVAL '1 day') WHERE user_id = $2",
-		durationDays, userID)
-	if err != nil {
-		return fmt.Errorf("failed to set roam boost: %w", err)
+	column, price := "coverage_boost_expires_at", 199
+	if kind == "roam" {
+		column, price = "roam_boost_expires_at", 299
 	}
-	return nil
-}
-
-func (r *userRepo) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
-	var err error
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var active bool
+	if err = tx.QueryRow(ctx, "SELECT COALESCE("+column+">NOW(),FALSE) FROM providers WHERE user_id=$1 FOR UPDATE", userID).Scan(&active); err != nil {
+		return err
+	}
 	if active {
-		// Re-activate: set to 1 day from now as a default resume
-		_, err = r.db.Exec(ctx,
-			"UPDATE providers SET coverage_boost_expires_at = NOW() + INTERVAL '1 day' WHERE user_id = $1 AND coverage_boost_expires_at IS NOT NULL",
-			userID)
-	} else {
-		// Deactivate: nullify the expiry
-		_, err = r.db.Exec(ctx,
-			"UPDATE providers SET coverage_boost_expires_at = NULL WHERE user_id = $1",
-			userID)
-	}
+		return nil
+	} // A retry must not charge an active weekly purchase again.
+	tag, err := tx.Exec(ctx, "UPDATE provider_wallets SET balance=balance-$1,updated_at=NOW() WHERE provider_id=$2 AND balance >= $1", price, userID)
 	if err != nil {
-		return fmt.Errorf("failed to toggle coverage boost: %w", err)
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("insufficient wallet balance")
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO wallet_transactions(provider_id,amount,type,description) VALUES($1,$2,'DEBIT',$3)", userID, price, kind+" boost: 7 days"); err != nil {
+		return err
+	}
+	assignments := column + "=NOW()+INTERVAL '7 days'"
+	if kind == "coverage" {
+		assignments += ",coverage_boost_enabled=TRUE"
+	}
+	if _, err = tx.Exec(ctx, "UPDATE providers SET "+assignments+" WHERE user_id=$1", userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+func (r *userRepo) SetCoverageBoost(ctx context.Context, userID string, days int) error {
+	return r.purchaseBoost(ctx, userID, "coverage", days)
+}
+func (r *userRepo) SetRoamBoost(ctx context.Context, userID string, days int) error {
+	return r.purchaseBoost(ctx, userID, "roam", days)
+}
+func (r *userRepo) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
+	tag, err := r.db.Exec(ctx, "UPDATE providers SET coverage_boost_enabled=$1 WHERE user_id=$2 AND (NOT $1 OR coverage_boost_expires_at>NOW())", active, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("no purchased coverage boost is available")
 	}
 	return nil
+}
+func (r *userRepo) RequestVerification(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `INSERT INTO verification_requests(provider_id) SELECT user_id FROM providers WHERE user_id=$1
+ ON CONFLICT(provider_id) DO NOTHING`, userID)
+	return err
 }

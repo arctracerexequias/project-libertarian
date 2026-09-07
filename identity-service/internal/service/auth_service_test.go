@@ -82,3 +82,24 @@ func TestAuthService_Login(t *testing.T) {
 		t.Fatal("Expected error for wrong password, got nil")
 	}
 }
+
+func TestPublicRegistrationCannotCreateAdmin(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test_secret")
+	repo := newMockUserRepo()
+	svc := NewAuthService(repo)
+	if _, err := svc.Register(context.Background(), domain.RegisterRequest{Email: "admin@example.com", Password: "long-password", Role: "admin"}); err == nil {
+		t.Fatal("public admin registration allowed")
+	}
+	if len(repo.users) != 0 {
+		t.Fatal("unauthorized user persisted")
+	}
+}
+func TestBoostRejectsArbitraryDuration(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test_secret")
+	svc := NewAuthService(newMockUserRepo())
+	for _, days := range []int{-1, 0, 365} {
+		if err := svc.PurchaseCoverageBoost(context.Background(), "provider", days); err == nil {
+			t.Fatalf("accepted %d days", days)
+		}
+	}
+}

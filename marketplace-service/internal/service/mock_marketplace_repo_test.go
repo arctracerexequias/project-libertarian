@@ -7,8 +7,9 @@ import (
 )
 
 type mockMarketplaceRepo struct {
-	jobs []domain.Job
-	bids []domain.Bid
+	cancelled bool
+	jobs      []domain.Job
+	bids      []domain.Bid
 }
 
 func newMockMarketplaceRepo() *mockMarketplaceRepo {
@@ -51,11 +52,11 @@ func (m *mockMarketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) 
 	return res, nil
 }
 
-func (m *mockMarketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID string) error {
+func (m *mockMarketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID, userID string) error {
 	return nil
 }
 
-func (m *mockMarketplaceRepo) RejectBid(ctx context.Context, jobID, bidID string, reason string) error {
+func (m *mockMarketplaceRepo) RejectBid(ctx context.Context, jobID, bidID, userID string, reason string) error {
 	return nil
 }
 
@@ -67,7 +68,7 @@ func (m *mockMarketplaceRepo) CompleteJob(ctx context.Context, jobID, userID str
 	return nil
 }
 
-func (m *mockMarketplaceRepo) UpdateJobStatus(ctx context.Context, jobID string, status string) error {
+func (m *mockMarketplaceRepo) UpdateJobStatus(ctx context.Context, jobID, userID string, status string) error {
 	for i, j := range m.jobs {
 		if j.ID == jobID {
 			m.jobs[i].Status = status
@@ -78,6 +79,7 @@ func (m *mockMarketplaceRepo) UpdateJobStatus(ctx context.Context, jobID string,
 }
 
 func (m *mockMarketplaceRepo) CancelJob(ctx context.Context, jobID string, userID string) error {
+	m.cancelled = true
 	return nil
 }
 

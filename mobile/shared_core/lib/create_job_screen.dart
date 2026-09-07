@@ -416,8 +416,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       maxBudget: (_offerAmount ?? 0) * workers,
       paymentMethod: switch (_payment) {
         'Cash on Delivery (after service)' || 'Cash after service' => 'CASH',
-        'GCash' => 'GCASH',
-        'e-wallet (Maya)' => 'MAYA',
         _ => 'ONLINE',
       },
       location: location,
@@ -1148,8 +1146,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           value: _payment,
           hint: const Text('Select Payment Option'),
           items: const [
-            'e-wallet (Maya)',
-            'GCash',
+            'Card (secure checkout)',
             'Cash on Delivery (after service)',
           ]
               .map(

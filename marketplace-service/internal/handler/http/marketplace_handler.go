@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -46,7 +47,7 @@ func (h *MarketplaceHandler) GetJobs(c *gin.Context) {
 
 	jobs, err := h.service.ListJobs(c.Request.Context(), category, lat, lng, radius)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch jobs"})
+		writeError(c, err, "Failed to fetch jobs")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
@@ -77,7 +78,7 @@ func (h *MarketplaceHandler) PostJob(c *gin.Context) {
 
 	job, err := h.service.PostJob(c.Request.Context(), userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create job"})
+		writeError(c, err, "Failed to create job")
 		return
 	}
 	c.JSON(http.StatusCreated, job)
@@ -99,7 +100,7 @@ func (h *MarketplaceHandler) PlaceBid(c *gin.Context) {
 
 	bidID, err := h.service.PlaceBid(c.Request.Context(), userID, jobID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit bid"})
+		writeError(c, err, "Failed to submit bid")
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"id": bidID})
@@ -109,7 +110,7 @@ func (h *MarketplaceHandler) GetBids(c *gin.Context) {
 	jobID := c.Param("id")
 	bids, err := h.service.ListBids(c.Request.Context(), jobID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch bids"})
+		writeError(c, err, "Failed to fetch bids")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"bids": bids})
@@ -124,9 +125,9 @@ func (h *MarketplaceHandler) AcceptBid(c *gin.Context) {
 
 	jobID := c.Param("id")
 	bidID := c.Param("bidId")
-	err := h.service.AcceptOffer(c.Request.Context(), jobID, bidID)
+	err := h.service.AcceptOffer(c.Request.Context(), jobID, bidID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to accept bid"})
+		writeError(c, err, "Failed to accept bid")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Bid accepted"})
@@ -149,9 +150,9 @@ func (h *MarketplaceHandler) RejectBid(c *gin.Context) {
 		req.Reason = "Declined by customer"
 	}
 
-	err := h.service.RejectOffer(c.Request.Context(), jobID, bidID, req.Reason)
+	err := h.service.RejectOffer(c.Request.Context(), jobID, bidID, userID, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reject bid"})
+		writeError(c, err, "Failed to reject bid")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Bid rejected"})
@@ -168,7 +169,7 @@ func (h *MarketplaceHandler) CounterBid(c *gin.Context) {
 
 	err := h.service.CounterOffer(c.Request.Context(), bidID, userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to counter bid"})
+		writeError(c, err, "Failed to counter bid")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Counter offer sent"})
@@ -185,7 +186,7 @@ func (h *MarketplaceHandler) CompleteJob(c *gin.Context) {
 
 	err := h.service.MarkComplete(c.Request.Context(), jobID, userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete job"})
+		writeError(c, err, "Failed to complete job")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job completed"})
@@ -195,7 +196,7 @@ func (h *MarketplaceHandler) GetProviderBids(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	bids, err := h.service.ListProviderBids(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch bids"})
+		writeError(c, err, "Failed to fetch bids")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"bids": bids})
@@ -205,7 +206,7 @@ func (h *MarketplaceHandler) GetProviderJobs(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	jobs, err := h.service.ListProviderJobs(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch jobs"})
+		writeError(c, err, "Failed to fetch jobs")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
@@ -220,7 +221,7 @@ func (h *MarketplaceHandler) GetCustomerJobs(c *gin.Context) {
 
 	jobs, err := h.service.ListCustomerJobs(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch service history"})
+		writeError(c, err, "Failed to fetch service history")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
@@ -230,7 +231,7 @@ func (h *MarketplaceHandler) GetInsights(c *gin.Context) {
 	category := c.Query("category")
 	avg, count, err := h.service.GetInsights(c.Request.Context(), category)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch insights"})
+		writeError(c, err, "Failed to fetch insights")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"average": avg, "count": count})
@@ -252,9 +253,9 @@ func (h *MarketplaceHandler) UpdateJobStatus(c *gin.Context) {
 		return
 	}
 
-	err := h.service.UpdateJobStatus(c.Request.Context(), jobID, req.Status)
+	err := h.service.UpdateJobStatus(c.Request.Context(), jobID, userID, req.Status)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update job status"})
+		writeError(c, err, "Failed to update job status")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job status updated"})
@@ -270,8 +271,20 @@ func (h *MarketplaceHandler) CancelJob(c *gin.Context) {
 	jobID := c.Param("id")
 	err := h.service.CancelJob(c.Request.Context(), jobID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeError(c, err, "Could not update job")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job cancelled successfully"})
+}
+
+func writeError(c *gin.Context, err error, fallback string) {
+	if errors.Is(err, domain.ErrForbidden) {
+		c.JSON(403, gin.H{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, domain.ErrConflict) {
+		c.JSON(409, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(500, gin.H{"error": fallback})
 }

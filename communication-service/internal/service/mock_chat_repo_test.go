@@ -8,6 +8,7 @@ import (
 
 type mockChatRepo struct {
 	messages []domain.Message
+	denied   bool
 }
 
 func newMockChatRepo() *mockChatRepo {
@@ -27,4 +28,8 @@ func (m *mockChatRepo) GetMessagesByJob(ctx context.Context, jobID string) ([]do
 		}
 	}
 	return res, nil
+}
+
+func (m *mockChatRepo) IsParticipant(ctx context.Context, jobID, userID string) (bool, error) {
+	return !m.denied, nil
 }

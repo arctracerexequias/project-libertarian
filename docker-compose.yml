@@ -1,12 +1,12 @@
-version: '3.8'
-
 services:
   db:
     image: postgis/postgis:15-3.4
     environment:
       POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: marketplace
+    volumes:
+      - marketplace-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d marketplace"]
       interval: 5s
@@ -16,12 +16,12 @@ services:
       - marketplace-network
 
   db-migrate:
-    image: migrate/migrate
+    image: migrate/migrate:v4.18.3
     volumes:
       - ./database/migrations:/migrations
     command:
       - -path=/migrations/
-      - -database=postgres://user:password@db:5432/marketplace?sslmode=disable
+      - -database=postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace?sslmode=disable
       - up
     depends_on:
       db:
@@ -30,9 +30,10 @@ services:
       - marketplace-network
 
   db-seed:
+    profiles: [dev]
     image: postgis/postgis:15-3.4
     environment:
-      PGPASSWORD: password
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - ./database/seed.sql:/seed.sql:ro
     command: ["psql", "-h", "db", "-U", "user", "-d", "marketplace", "-v", "ON_ERROR_STOP=1", "-f", "/seed.sql"]
@@ -45,9 +46,10 @@ services:
   api-gateway:
     build: ./api-gateway
     environment:
-      JWT_SECRET: super_secret_jwt_key_for_development
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
     ports:
-      - "8080:8080"
+      - "${GATEWAY_BIND_ADDRESS:-127.0.0.1}:8080:8080"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -63,10 +65,11 @@ services:
       context: .
       dockerfile: identity-service/Dockerfile
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/marketplace
-      JWT_SECRET: super_secret_jwt_key_for_development
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      DATABASE_URL: postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
     depends_on:
-      db-seed:
+      db-migrate:
         condition: service_completed_successfully
     networks:
       - marketplace-network
@@ -76,7 +79,8 @@ services:
       context: .
       dockerfile: marketplace-service/Dockerfile
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/marketplace
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      DATABASE_URL: postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -89,8 +93,9 @@ services:
       context: .
       dockerfile: communication-service/Dockerfile
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/marketplace
-      JWT_SECRET: super_secret_jwt_key_for_development
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      DATABASE_URL: postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace
+      WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -102,8 +107,10 @@ services:
       context: .
       dockerfile: payment-service/Dockerfile
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/marketplace
-      STRIPE_SECRET_KEY: your_stripe_secret_key
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      DATABASE_URL: postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      CHECKOUT_RETURN_URL: ${CHECKOUT_RETURN_URL:-http://localhost:8080/api/v1/payment/checkout/return}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -113,10 +120,11 @@ services:
   admin-service:
     build: ./admin-service
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/marketplace
-      ADMIN_PASSWORD: admin_dev_password
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      DATABASE_URL: postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -128,7 +136,8 @@ services:
       context: .
       dockerfile: dispatch-service/Dockerfile
     environment:
-      DATABASE_URL: postgres://user:password@db:5432/marketplace
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      DATABASE_URL: postgres://user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/marketplace
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -138,3 +147,6 @@ services:
 networks:
   marketplace-network:
     driver: bridge
+
+volumes:
+  marketplace-data:

@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/service-marketplace/marketplace-service/internal/domain"
@@ -46,38 +44,14 @@ func TestMarketplaceService_PostJob(t *testing.T) {
 	}
 }
 
-func TestMarketplaceService_CancelCashJobSkipsRefund(t *testing.T) {
+func TestMarketplaceService_CancelJobDelegatesDurableCancellation(t *testing.T) {
 	repo := newMockMarketplaceRepo()
-	repo.jobs = append(repo.jobs, domain.Job{
-		ID:            "cash-job",
-		PaymentMethod: "CASH",
-	})
-
-	refundCalls := 0
-	communicationCalls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/escrow/refund":
-			refundCalls++
-		case "/chat/system":
-			communicationCalls++
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	t.Setenv("PAYMENT_SERVICE_URL", server.URL)
-	t.Setenv("COMMUNICATION_SERVICE_URL", server.URL)
-
 	svc := NewMarketplaceService(repo)
-	if err := svc.CancelJob(context.Background(), "cash-job", "customer-1"); err != nil {
-		t.Fatalf("Failed to cancel cash job: %v", err)
+	if err := svc.CancelJob(context.Background(), "cash-job", "customer"); err != nil {
+		t.Fatal(err)
 	}
-	if refundCalls != 0 {
-		t.Errorf("Expected no refund call for cash job, got %d", refundCalls)
-	}
-	if communicationCalls != 1 {
-		t.Errorf("Expected one cancellation notification, got %d", communicationCalls)
+	if !repo.cancelled {
+		t.Fatal("cancellation not persisted")
 	}
 }
 
@@ -127,5 +101,16 @@ func TestMarketplaceService_PlaceBid(t *testing.T) {
 	}
 	if bids[0].Amount != req.Amount {
 		t.Errorf("Expected amount %f, got %f", req.Amount, bids[0].Amount)
+	}
+}
+
+func TestInvalidBidAndRatingRejected(t *testing.T) {
+	repo := newMockMarketplaceRepo()
+	svc := NewMarketplaceService(repo)
+	if _, err := svc.PlaceBid(context.Background(), "provider", "job", domain.CreateBidRequest{Amount: -1}); err == nil {
+		t.Fatal("negative bid allowed")
+	}
+	if err := svc.MarkComplete(context.Background(), "job", "customer", domain.CompleteJobRequest{Score: 6}); err == nil {
+		t.Fatal("invalid rating allowed")
 	}
 }

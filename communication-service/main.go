@@ -10,6 +10,7 @@ import (
 	"github.com/service-marketplace/communication-service/internal/repository/postgres"
 	"github.com/service-marketplace/communication-service/internal/service"
 	"github.com/service-marketplace/shared-contracts/pkg/database"
+	"github.com/service-marketplace/shared-contracts/pkg/middleware"
 )
 
 func main() {
@@ -31,15 +32,15 @@ func main() {
 	handler := http.NewChatHandler(svc)
 
 	r := gin.Default()
+	r.Use(middleware.RequireGateway())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "up", "service": "communication-service"})
 	})
 
-	chat := r.Group("/chat")
+	chat := r.Group("/chat", middleware.RequireAuth())
 	{
 		chat.GET("/history/:jobId", handler.GetHistory)
-		chat.POST("/system", handler.SendSystemMessage)
 		chat.GET("/ws", handler.HandleWebSocket)
 	}
 

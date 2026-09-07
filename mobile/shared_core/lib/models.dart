@@ -305,12 +305,14 @@ class Bid {
 }
 
 class ChatMessage {
+  final String id;
   final String jobId;
   final String senderId;
   final String content;
   final DateTime timestamp;
 
   ChatMessage({
+    this.id = '',
     required this.jobId,
     required this.senderId,
     required this.content,
@@ -319,6 +321,7 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
+      id: json['id'] ?? '',
       jobId: json['job_id'] ?? '',
       senderId: json['sender_id'] ?? '',
       content: json['content'] ?? '',

@@ -10,12 +10,12 @@ class AuthService {
 
   final Dio _dio = NetworkService().dio;
   final _storage = const FlutterSecureStorage();
-  
+
   Stream<AuthStatus> get status => NetworkService().authStatus;
-  
+
   UserProfile? _currentUser;
   UserProfile? get currentUser => _currentUser;
-  
+
   final _userController = StreamController<UserProfile?>.broadcast();
   Stream<UserProfile?> get userStream => _userController.stream;
 
@@ -60,11 +60,11 @@ class AuthService {
       if (response.statusCode == 200) {
         final token = response.data['token'];
         await _storage.write(key: 'jwt_token', value: token);
-        
+
         final profile = UserProfile.fromJson(response.data['user']);
         _currentUser = profile;
         _userController.add(_currentUser);
-        
+
         NetworkService().notifyAuthenticated();
         return profile;
       }
@@ -89,7 +89,8 @@ class AuthService {
     return null;
   }
 
-  Future<bool> updateProfile(String fullName, String bio, List<String> skills) async {
+  Future<bool> updateProfile(
+      String fullName, String bio, List<String> skills) async {
     try {
       final response = await _dio.put('/identity/auth/profile',
           data: {'full_name': fullName, 'bio': bio, 'skills': skills});
@@ -112,6 +113,15 @@ class AuthService {
 
   Future<String?> getToken() async {
     return await _storage.read(key: 'jwt_token');
+  }
+
+  Future<bool> requestVerification() async {
+    try {
+      final response = await _dio.post('/identity/auth/verification/request');
+      return response.statusCode == 202;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> verifyMe() async {

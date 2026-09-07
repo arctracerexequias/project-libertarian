@@ -6,11 +6,10 @@ class PaymentService {
 
   PaymentService();
 
-  Future<Map<String, dynamic>?> initEscrow(String jobId, double amount) async {
+  Future<Map<String, dynamic>?> initEscrow(String jobId) async {
     try {
       final response = await _dio.post('/payment/escrow/init', data: {
         'job_id': jobId,
-        'amount': amount,
       });
       if (response.statusCode == 200) {
         return response.data;

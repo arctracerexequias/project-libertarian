@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'marketplace_service.dart';
@@ -20,7 +21,8 @@ class JobDetailScreen extends StatefulWidget {
   State<JobDetailScreen> createState() => _JobDetailScreenState();
 }
 
-class _JobDetailScreenState extends State<JobDetailScreen> {
+class _JobDetailScreenState extends State<JobDetailScreen>
+    with WidgetsBindingObserver {
   final _marketplaceService = MarketplaceService();
   final _paymentService = PaymentService();
   final _authService = AuthService();
@@ -40,9 +42,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _currentStatus = widget.job.status;
     _fetchEscrowStatus();
     _fetchProfile();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _fetchProfile() async {
@@ -79,30 +88,47 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _fetchEscrowStatus();
+  }
+
   void _fundEscrow() async {
-    if (widget.job.isCashOnDelivery) return;
+    if (widget.job.isCashOnDelivery || _isFunding) return;
     setState(() => _isFunding = true);
-    final bids = await _marketplaceService.getBids(widget.job.id);
-    final acceptedBid = bids.firstWhere((b) => b.status == 'accepted',
-        orElse: () => bids.first);
-
-    final result =
-        await _paymentService.initEscrow(widget.job.id, acceptedBid.amount);
-    setState(() => _isFunding = false);
-
-    if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Funds secured in escrow!')),
-      );
-      _fetchEscrowStatus();
+    try {
+      final result = await _paymentService.initEscrow(widget.job.id);
+      if (!mounted) return;
+      if (result == null) throw StateError('Checkout unavailable');
+      final checkout = Uri.tryParse(result['checkout_url'] as String? ?? '');
+      if (result['status'] == 'HELD') {
+        await _fetchEscrowStatus();
+      } else if (checkout != null &&
+          checkout.scheme == 'https' &&
+          checkout.host == 'checkout.stripe.com' &&
+          await launchUrl(checkout, mode: LaunchMode.externalApplication)) {
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Complete checkout, then return to check payment status.')));
+      } else {
+        throw StateError('Unable to open checkout');
+      }
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not open checkout. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _isFunding = false);
     }
   }
 
   void _releasePayment() async {
     final success = await _paymentService.releaseEscrow(widget.job.id);
+    if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment released to provider.')),
+        const SnackBar(content: Text('Payment confirmed.')),
       );
       _fetchEscrowStatus();
     }
@@ -425,6 +451,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.job.title),
+          actions: [
+            IconButton(
+                onPressed: _fetchEscrowStatus,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh payment status')
+          ],
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () {
@@ -511,6 +543,21 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 16),
+              if (!widget.job.isCashOnDelivery && _escrowStatus != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(switch (_escrowStatus!['status']) {
+                    'PENDING' => 'Checkout is awaiting confirmation.',
+                    'HELD' =>
+                      'Payment is authorized and awaiting service completion.',
+                    'RELEASED' => 'Payment confirmed.',
+                    'REFUNDED' =>
+                      'Payment refunded or authorization cancelled.',
+                    'EXPIRED' =>
+                      'Payment authorization expired or was cancelled. Contact support before continuing.',
+                    _ => 'Payment has not been authorized.',
+                  }),
+                ),
               _buildMapSection(isProvider),
               const SizedBox(height: 8),
               if (_isActionLoading)
@@ -687,8 +734,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ],
                   if (!widget.job.isCashOnDelivery &&
                       _currentStatus == JobStatus.accepted &&
-                      (_escrowStatus == null ||
-                          _escrowStatus!['status'] != 'HELD'))
+                      (_escrowStatus?['status'] == 'UNFUNDED' ||
+                          _escrowStatus?['status'] == 'PENDING'))
                     _isFunding
                         ? const CircularProgressIndicator()
                         : SizedBox(
@@ -697,7 +744,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             child: ElevatedButton.icon(
                               onPressed: _fundEscrow,
                               icon: const Icon(Icons.account_balance_wallet),
-                              label: const Text('Fund Escrow'),
+                              label: const Text('Open secure checkout'),
                               style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.orange,
                                   foregroundColor: Colors.white),
@@ -790,7 +837,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       child: ElevatedButton.icon(
                         onPressed: _releasePayment,
                         icon: const Icon(Icons.payment),
-                        label: const Text('Release Payment'),
+                        label: const Text('Confirm payment'),
                         style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:dio/dio.dart';
@@ -21,10 +22,13 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   WebSocketChannel? _channel;
-  final List<dynamic> _items = []; // Can be ChatMessage, Bid, or Map (for counter offers)
+  final List<dynamic> _items =
+      []; // Can be ChatMessage, Bid, or Map (for counter offers)
   bool _isOtherUserTyping = false;
   DateTime? _lastTypingTime;
   bool _isLoading = true;
+  Timer? _historyTimer;
+  bool _refreshingHistory = false;
 
   final Dio _dio = NetworkService().dio;
 
@@ -32,18 +36,22 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _fetchHistoryAndConnect();
+    _historyTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) => _refreshHistory());
   }
 
   Future<void> _fetchHistoryAndConnect() async {
     final token = await AuthService().getToken();
     try {
-      final response = await _dio.get('/communication/chat/history/${widget.jobId}');
+      final response =
+          await _dio.get('/communication/chat/history/${widget.jobId}');
       if (response.statusCode == 200) {
         final List historyData = response.data;
         if (mounted) {
           setState(() {
             _items.clear();
-            _items.addAll(historyData.map((json) => ChatMessage.fromJson(json)));
+            _items
+                .addAll(historyData.map((json) => ChatMessage.fromJson(json)));
           });
         }
       }
@@ -75,7 +83,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     // Connect WebSocket — uses the dedicated ws/wss base URL from AppConfig
-    final wsUrl = '${AppConfig.wsBaseUrl}/communication/chat/ws?jobId=${widget.jobId}&token=${token ?? ""}';
+    final wsUrl =
+        '${AppConfig.wsBaseUrl}/communication/chat/ws?jobId=${widget.jobId}&token=${token ?? ""}';
 
     try {
       final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
@@ -99,7 +108,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
 
         final msg = ChatMessage.fromJson(json);
-        if (msg.jobId == widget.jobId) {
+        if (msg.jobId == widget.jobId &&
+            !_items.whereType<ChatMessage>().any((item) => item.id == msg.id)) {
           setState(() {
             _items.add(msg);
             _sortItems();
@@ -120,8 +130,42 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _refreshHistory() async {
+    if (_refreshingHistory || _isLoading) return;
+    _refreshingHistory = true;
+    try {
+      final response =
+          await _dio.get('/communication/chat/history/${widget.jobId}');
+      if (!mounted) return;
+      if (response.statusCode == 403 || response.statusCode == 401) {
+        _channel?.sink.close();
+        _historyTimer?.cancel();
+        return;
+      }
+      if (response.statusCode != 200) return;
+      final known =
+          _items.whereType<ChatMessage>().map((message) => message.id).toSet();
+      final messages = (response.data as List)
+          .map((json) => ChatMessage.fromJson(json))
+          .where((message) => !known.contains(message.id))
+          .toList();
+      if (messages.isNotEmpty)
+        setState(() {
+          _items.addAll(messages);
+          _sortItems();
+        });
+    } catch (_) {
+      // Retry persisted messages on the next tick after a temporary outage.
+    } finally {
+      _refreshingHistory = false;
+    }
+  }
+
   void _onTextChanged(String text) {
-    if (_channel != null && (_lastTypingTime == null || DateTime.now().difference(_lastTypingTime!) > const Duration(seconds: 1))) {
+    if (_channel != null &&
+        (_lastTypingTime == null ||
+            DateTime.now().difference(_lastTypingTime!) >
+                const Duration(seconds: 1))) {
       _lastTypingTime = DateTime.now();
       _channel!.sink.add(jsonEncode({
         'type': 'TYPING',
@@ -149,6 +193,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _historyTimer?.cancel();
     _channel?.sink.close();
     _messageController.dispose();
     super.dispose();
@@ -156,8 +201,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sortItems() {
     _items.sort((a, b) {
-      DateTime timeA = a is ChatMessage ? a.timestamp : (a is Bid ? a.createdAt : a['timestamp']);
-      DateTime timeB = b is ChatMessage ? b.timestamp : (b is Bid ? b.createdAt : b['timestamp']);
+      DateTime timeA = a is ChatMessage
+          ? a.timestamp
+          : (a is Bid ? a.createdAt : a['timestamp']);
+      DateTime timeB = b is ChatMessage
+          ? b.timestamp
+          : (b is Bid ? b.createdAt : b['timestamp']);
       return timeB.compareTo(timeA); // descending
     });
   }
@@ -176,10 +225,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemCount: _items.length,
                     itemBuilder: (context, index) {
                       final item = _items[index];
-                      
+
                       if (item is Map && item['type'] == 'counter_offer') {
                         return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.orange.shade50,
@@ -191,19 +241,24 @@ class _ChatScreenState extends State<ChatScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.handshake, color: Colors.orange, size: 20),
+                                  const Icon(Icons.handshake,
+                                      color: Colors.orange, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Counter Offer by ${item['counterBy']}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.orange),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text('Original Bid: ₱${item['originalBidAmount']}'),
+                              Text(
+                                  'Original Bid: ₱${item['originalBidAmount']}'),
                               Text(
                                 'New Offer: ₱${item['amount']}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                             ],
                           ),
@@ -212,7 +267,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
                       if (item is Bid) {
                         return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.blue.shade50,
@@ -224,11 +280,14 @@ class _ChatScreenState extends State<ChatScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.local_offer, color: Colors.blue, size: 20),
+                                  const Icon(Icons.local_offer,
+                                      color: Colors.blue, size: 20),
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Bid Placed',
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue),
                                   ),
                                   const Spacer(),
                                   Text(
@@ -236,17 +295,25 @@ class _ChatScreenState extends State<ChatScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
-                                      color: item.status == 'accepted' ? Colors.green : Colors.grey,
+                                      color: item.status == 'accepted'
+                                          ? Colors.green
+                                          : Colors.grey,
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text('Amount: ₱${item.amount}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              if (item.estimatedTime.isNotEmpty) Text('Estimated Time: ${item.estimatedTime}'),
+                              Text('Amount: ₱${item.amount}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16)),
+                              if (item.estimatedTime.isNotEmpty)
+                                Text('Estimated Time: ${item.estimatedTime}'),
                               if (item.message.isNotEmpty) ...[
                                 const SizedBox(height: 4),
-                                Text('"${item.message}"', style: const TextStyle(fontStyle: FontStyle.italic)),
+                                Text('"${item.message}"',
+                                    style: const TextStyle(
+                                        fontStyle: FontStyle.italic)),
                               ],
                             ],
                           ),
@@ -259,23 +326,31 @@ class _ChatScreenState extends State<ChatScreen> {
                           alignment: Alignment.center,
                           margin: const EdgeInsets.symmetric(vertical: 8),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              msg.content == 'JOB_CANCELLED' ? '--- JOB CANCELLED ---' : msg.content,
-                              style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold),
+                              msg.content == 'JOB_CANCELLED'
+                                  ? '--- JOB CANCELLED ---'
+                                  : msg.content,
+                              style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ),
                         );
                       }
                       final isMe = msg.senderId == widget.userId;
                       return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment:
+                            isMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 4, horizontal: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: isMe ? Colors.indigo : Colors.grey[300],
@@ -283,7 +358,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           child: Text(
                             msg.content,
-                            style: TextStyle(color: isMe ? Colors.white : Colors.black),
+                            style: TextStyle(
+                                color: isMe ? Colors.white : Colors.black),
                           ),
                         ),
                       );
@@ -295,7 +371,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Typing...', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
+                      child: Text('Typing...',
+                          style: TextStyle(
+                              fontStyle: FontStyle.italic,
+                              color: Colors.grey,
+                              fontSize: 12)),
                     ),
                   ),
                 Padding(
@@ -306,7 +386,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: TextField(
                           controller: _messageController,
                           onChanged: _onTextChanged,
-                          decoration: const InputDecoration(hintText: 'Type a message...'),
+                          decoration: const InputDecoration(
+                              hintText: 'Type a message...'),
                         ),
                       ),
                       IconButton(

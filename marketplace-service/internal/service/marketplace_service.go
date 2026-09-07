@@ -1,12 +1,8 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,6 +61,9 @@ func (s *marketplaceService) PostJob(ctx context.Context, customerID string, req
 }
 
 func (s *marketplaceService) PlaceBid(ctx context.Context, providerID, jobID string, req domain.CreateBidRequest) (string, error) {
+	if req.Amount <= 0 {
+		return "", fmt.Errorf("bid amount must be positive")
+	}
 	bidID := uuid.New().String()
 	bid := &domain.Bid{
 		ID:            bidID,
@@ -83,19 +82,25 @@ func (s *marketplaceService) ListBids(ctx context.Context, jobID string) ([]doma
 	return s.repo.GetBidsByJobID(ctx, jobID)
 }
 
-func (s *marketplaceService) AcceptOffer(ctx context.Context, jobID, bidID string) error {
-	return s.repo.AcceptBid(ctx, jobID, bidID)
+func (s *marketplaceService) AcceptOffer(ctx context.Context, jobID, bidID, userID string) error {
+	return s.repo.AcceptBid(ctx, jobID, bidID, userID)
 }
 
-func (s *marketplaceService) RejectOffer(ctx context.Context, jobID, bidID string, reason string) error {
-	return s.repo.RejectBid(ctx, jobID, bidID, reason)
+func (s *marketplaceService) RejectOffer(ctx context.Context, jobID, bidID, userID string, reason string) error {
+	return s.repo.RejectBid(ctx, jobID, bidID, userID, reason)
 }
 
 func (s *marketplaceService) CounterOffer(ctx context.Context, bidID string, userID string, req domain.CounterBidRequest) error {
+	if req.Amount <= 0 {
+		return fmt.Errorf("counter amount must be positive")
+	}
 	return s.repo.CounterBid(ctx, bidID, userID, req.Amount, req.Reason)
 }
 
 func (s *marketplaceService) MarkComplete(ctx context.Context, jobID, userID string, req domain.CompleteJobRequest) error {
+	if req.Score < 1 || req.Score > 5 {
+		return fmt.Errorf("rating must be between 1 and 5")
+	}
 	return s.repo.CompleteJob(ctx, jobID, userID, req.Score, req.Comment)
 }
 
@@ -115,67 +120,10 @@ func (s *marketplaceService) GetInsights(ctx context.Context, category string) (
 	return s.repo.GetCategoryInsights(ctx, category)
 }
 
-func (s *marketplaceService) UpdateJobStatus(ctx context.Context, jobID string, status string) error {
-	return s.repo.UpdateJobStatus(ctx, jobID, status)
+func (s *marketplaceService) UpdateJobStatus(ctx context.Context, jobID, userID string, status string) error {
+	return s.repo.UpdateJobStatus(ctx, jobID, userID, status)
 }
 
 func (s *marketplaceService) CancelJob(ctx context.Context, jobID string, userID string) error {
-	job, err := s.repo.GetJobByID(ctx, jobID)
-	if err != nil {
-		return err
-	}
-
-	err = s.repo.CancelJob(ctx, jobID, userID)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	if job.PaymentMethod != "CASH" {
-		// Cash jobs never create an escrow transaction, so there is nothing to refund.
-		paymentServiceURL := os.Getenv("PAYMENT_SERVICE_URL")
-		if paymentServiceURL == "" {
-			paymentServiceURL = "http://payment-service:8084"
-		}
-
-		payload := map[string]string{"job_id": jobID}
-		jsonPayload, _ := json.Marshal(payload)
-		req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/escrow/refund", paymentServiceURL), bytes.NewBuffer(jsonPayload))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, refundErr := client.Do(req)
-		if refundErr != nil {
-			// Cancellation remains successful when the optional refund notification fails.
-			fmt.Printf("Warning: Failed to trigger refund for job %s: %v\n", jobID, refundErr)
-		} else {
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				fmt.Printf("Warning: Payment service returned status %d for refund of job %s\n", resp.StatusCode, jobID)
-			}
-		}
-	}
-
-	// Notify communication service
-	commServiceURL := os.Getenv("COMMUNICATION_SERVICE_URL")
-	if commServiceURL == "" {
-		commServiceURL = "http://communication-service:8083"
-	}
-
-	commPayload := map[string]string{
-		"job_id":  jobID,
-		"content": "JOB_CANCELLED",
-	}
-	jsonCommPayload, _ := json.Marshal(commPayload)
-
-	reqComm, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/chat/system", commServiceURL), bytes.NewBuffer(jsonCommPayload))
-	reqComm.Header.Set("Content-Type", "application/json")
-
-	respComm, err := client.Do(reqComm)
-	if err != nil {
-		fmt.Printf("Warning: Failed to notify communication service for job %s: %v\n", jobID, err)
-		return nil
-	}
-	defer respComm.Body.Close()
-
-	return nil
+	return s.repo.CancelJob(ctx, jobID, userID)
 }

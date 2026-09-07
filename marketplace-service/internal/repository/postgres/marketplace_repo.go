@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/service-marketplace/marketplace-service/internal/domain"
 )
@@ -79,13 +80,23 @@ func (r *marketplaceRepo) CreateJob(ctx context.Context, job *domain.Job) error 
 }
 
 func (r *marketplaceRepo) CreateBid(ctx context.Context, bid *domain.Bid) error {
-	_, err := r.db.Exec(ctx,
-		"INSERT INTO bids (id, job_id, provider_id, amount, estimated_time, message, status) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-		bid.ID, bid.JobID, bid.ProviderID, bid.Amount, bid.EstimatedTime, bid.Message, bid.Status)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to submit bid: %w", err)
+		return err
 	}
-	return nil
+	defer tx.Rollback(ctx)
+	owner, status, err := r.lockJob(ctx, tx, bid.JobID)
+	if err != nil {
+		return err
+	}
+	if owner == bid.ProviderID || (status != "PUBLISHED" && status != "BIDDING") {
+		return fmt.Errorf("%w: job is not accepting this bid", domain.ErrConflict)
+	}
+	_, err = tx.Exec(ctx, "INSERT INTO bids(id,job_id,provider_id,amount,estimated_time,message,status) VALUES($1,$2,$3,$4,$5,$6,$7)", bid.ID, bid.JobID, bid.ProviderID, bid.Amount, bid.EstimatedTime, bid.Message, bid.Status)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *marketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) ([]domain.Bid, error) {
@@ -126,51 +137,134 @@ func (r *marketplaceRepo) GetBidsByJobID(ctx context.Context, jobID string) ([]d
 	return bids, nil
 }
 
-func (r *marketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID string) error {
+// Lock the job before examining bids so accept/counter/complete/cancel serialize.
+func (r *marketplaceRepo) lockJob(ctx context.Context, tx pgx.Tx, jobID string) (string, string, error) {
+	var owner, status string
+	err := tx.QueryRow(ctx, "SELECT customer_id, status FROM jobs WHERE id=$1 FOR UPDATE", jobID).Scan(&owner, &status)
+	return owner, status, err
+}
+
+func (r *marketplaceRepo) AcceptBid(ctx context.Context, jobID, bidID, userID string) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-
-	_, err = tx.Exec(ctx, "UPDATE bids SET amount = CASE WHEN status = 'COUNTERED' THEN counter_amount ELSE amount END, status = 'ACCEPTED' WHERE id = $1", bidID)
+	owner, status, err := r.lockJob(ctx, tx, jobID)
 	if err != nil {
 		return err
 	}
-	// Auto-reject other bids with a reason
-	_, err = tx.Exec(ctx, "UPDATE bids SET status = 'REJECTED', decline_reason = 'Another provider was selected' WHERE job_id = $1 AND id != $2", jobID, bidID)
+	if owner != userID {
+		return fmt.Errorf("%w: only the job owner may accept bids", domain.ErrForbidden)
+	}
+	if status != "PUBLISHED" && status != "BIDDING" {
+		return fmt.Errorf("%w: job is no longer accepting bids", domain.ErrConflict)
+	}
+	tag, err := tx.Exec(ctx, `UPDATE bids SET amount=CASE WHEN status='COUNTERED' THEN counter_amount ELSE amount END, status='ACCEPTED'
+  WHERE id=$1 AND job_id=$2 AND (status='PENDING' OR (status='COUNTERED' AND counter_by <> $3::uuid))`, bidID, jobID, userID)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "UPDATE jobs SET status = 'ACCEPTED' WHERE id = $1", jobID)
-	if err != nil {
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("%w: bid is not an eligible offer for this job", domain.ErrConflict)
+	}
+	if _, err = tx.Exec(ctx, "UPDATE bids SET status='REJECTED', decline_reason='Another provider was selected' WHERE job_id=$1 AND id<>$2", jobID, bidID); err != nil {
 		return err
 	}
-
+	if _, err = tx.Exec(ctx, "UPDATE jobs SET status='ACCEPTED', updated_at=NOW() WHERE id=$1", jobID); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
-func (r *marketplaceRepo) RejectBid(ctx context.Context, jobID, bidID string, reason string) error {
-	_, err := r.db.Exec(ctx, "UPDATE bids SET status = 'REJECTED', decline_reason = $1 WHERE id = $2 AND job_id = $3", reason, bidID, jobID)
-	return err
+func (r *marketplaceRepo) RejectBid(ctx context.Context, jobID, bidID, userID string, reason string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	owner, status, err := r.lockJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if owner != userID {
+		return domain.ErrForbidden
+	}
+	if status != "PUBLISHED" && status != "BIDDING" {
+		return domain.ErrConflict
+	}
+	tag, err := tx.Exec(ctx, "UPDATE bids SET status='REJECTED', decline_reason=$1 WHERE id=$2 AND job_id=$3 AND status IN ('PENDING','COUNTERED')", reason, bidID, jobID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("%w: eligible bid not found", domain.ErrConflict)
+	}
+	return tx.Commit(ctx)
 }
 
-func (r *marketplaceRepo) CounterBid(ctx context.Context, bidID string, userID string, amount float64, reason string) error {
-	_, err := r.db.Exec(ctx, "UPDATE bids SET amount = CASE WHEN status = 'COUNTERED' THEN counter_amount ELSE amount END, status = 'COUNTERED', counter_amount = $1, counter_by = $2, message = CASE WHEN $3 != '' THEN $3 ELSE message END WHERE id = $4", amount, userID, reason, bidID)
-	return err
+func (r *marketplaceRepo) CounterBid(ctx context.Context, bidID, userID string, amount float64, reason string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var jobID, provider string
+	if err = tx.QueryRow(ctx, "SELECT job_id,provider_id FROM bids WHERE id=$1", bidID).Scan(&jobID, &provider); err != nil {
+		return err
+	}
+	owner, status, err := r.lockJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if owner != userID && provider != userID {
+		return domain.ErrForbidden
+	}
+	if status != "PUBLISHED" && status != "BIDDING" {
+		return domain.ErrConflict
+	}
+	tag, err := tx.Exec(ctx, `UPDATE bids SET amount=CASE WHEN status='COUNTERED' THEN counter_amount ELSE amount END,
+ status='COUNTERED',counter_amount=$1,counter_by=$2,message=CASE WHEN $3<>'' THEN $3 ELSE message END
+ WHERE id=$4 AND status IN ('PENDING','COUNTERED')`, amount, userID, reason, bidID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("%w: eligible bid not found", domain.ErrConflict)
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *marketplaceRepo) CompleteJob(ctx context.Context, jobID, userID string, score int, comment string) error {
-	var providerID string
-	err := r.db.QueryRow(ctx, "UPDATE jobs SET status = 'COMPLETED' WHERE id = $1 RETURNING (SELECT provider_id FROM bids WHERE job_id = $1 AND status = 'ACCEPTED')", jobID).Scan(&providerID)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to complete job: %w", err)
+		return err
 	}
-	_, err = r.db.Exec(ctx, "INSERT INTO ratings (job_id, provider_id, customer_id, score, comment) VALUES ($1, $2, $3, $4, $5)", jobID, providerID, userID, score, comment)
+	defer tx.Rollback(ctx)
+	owner, status, err := r.lockJob(ctx, tx, jobID)
 	if err != nil {
-		return fmt.Errorf("failed to insert rating: %w", err)
+		return err
 	}
-	return nil
+	if owner != userID {
+		return fmt.Errorf("%w: only the customer may complete a job", domain.ErrForbidden)
+	}
+	if status == "COMPLETED" {
+		return nil
+	} // Retrying completion must not insert another rating.
+	if status != "IN_PROGRESS" {
+		return fmt.Errorf("%w: job must be in progress before completion", domain.ErrConflict)
+	}
+	var provider string
+	if err = tx.QueryRow(ctx, "SELECT provider_id FROM bids WHERE job_id=$1 AND status='ACCEPTED'", jobID).Scan(&provider); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO ratings(job_id,provider_id,customer_id,score,comment) VALUES($1,$2,$3,$4,$5)", jobID, provider, userID, score, comment); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, "UPDATE jobs SET status='COMPLETED',updated_at=NOW() WHERE id=$1", jobID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *marketplaceRepo) GetBidsByProviderID(ctx context.Context, providerID string) ([]domain.Bid, error) {
@@ -259,26 +353,51 @@ func (r *marketplaceRepo) GetCategoryInsights(ctx context.Context, category stri
 	return avg, count, err
 }
 
-func (r *marketplaceRepo) UpdateJobStatus(ctx context.Context, jobID string, status string) error {
-	_, err := r.db.Exec(ctx, "UPDATE jobs SET status = $1 WHERE id = $2", status, jobID)
-	return err
-}
-
-func (r *marketplaceRepo) CancelJob(ctx context.Context, jobID string, userID string) error {
-	// Only allow cancellation if user is the customer or the assigned provider
-	// And if the job is not already completed
-	query := `
-		UPDATE jobs 
-		SET status = 'CANCELLED' 
-		WHERE id = $1 AND status NOT IN ('COMPLETED', 'CANCELLED')
-		AND (customer_id = $2 OR id IN (SELECT job_id FROM bids WHERE provider_id = $2 AND status = 'ACCEPTED'))
-	`
-	tag, err := r.db.Exec(ctx, query, jobID, userID)
+func (r *marketplaceRepo) UpdateJobStatus(ctx context.Context, jobID, userID string, status string) error {
+	previous := map[string]string{"EN_ROUTE": "ACCEPTED", "IN_PROGRESS": "EN_ROUTE"}[status]
+	if previous == "" {
+		return fmt.Errorf("%w: unsupported job transition", domain.ErrConflict)
+	}
+	tag, err := r.db.Exec(ctx, `UPDATE jobs SET status=$1,updated_at=NOW() WHERE id=$2 AND status=$3
+ AND EXISTS(SELECT 1 FROM bids WHERE job_id=$2 AND provider_id=$4 AND status='ACCEPTED')`, status, jobID, previous, userID)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("job not found or unauthorized to cancel")
+	if tag.RowsAffected() != 1 {
+		return domain.ErrForbidden
 	}
 	return nil
+}
+
+func (r *marketplaceRepo) CancelJob(ctx context.Context, jobID, userID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	owner, status, err := r.lockJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	var participant bool
+	if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM bids WHERE job_id=$1 AND provider_id=$2 AND status='ACCEPTED')", jobID, userID).Scan(&participant); err != nil {
+		return err
+	}
+	if owner != userID && !participant {
+		return fmt.Errorf("%w: not permitted to cancel this job", domain.ErrForbidden)
+	}
+	if status == "CANCELLED" {
+		return nil
+	}
+	if status == "COMPLETED" || status == "DISPUTED" {
+		return fmt.Errorf("%w: job cannot be cancelled in its current state", domain.ErrConflict)
+	}
+	if _, err = tx.Exec(ctx, "UPDATE jobs SET status='CANCELLED',updated_at=NOW() WHERE id=$1", jobID); err != nil {
+		return err
+	}
+	// The payment reconciler retries refunds by querying cancelled jobs, even after restarts.
+	if _, err = tx.Exec(ctx, "INSERT INTO messages(job_id,sender_id,content) VALUES($1,NULL,'JOB_CANCELLED')", jobID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

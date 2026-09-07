@@ -58,3 +58,5 @@ func (m *mockUserRepo) SetRoamBoost(ctx context.Context, userID string, duration
 func (m *mockUserRepo) ToggleCoverageBoost(ctx context.Context, userID string, active bool) error {
 	return nil
 }
+
+func (m *mockUserRepo) RequestVerification(ctx context.Context, userID string) error { return nil }

@@ -12,11 +12,14 @@ class NetworkService {
 
   late final Dio dio;
   final _storage = const FlutterSecureStorage();
-  
+
   final _statusController = StreamController<AuthStatus>.broadcast();
   Stream<AuthStatus> get authStatus => _statusController.stream;
 
   NetworkService._internal() {
+    if (kReleaseMode && Uri.parse(AppConfig.baseUrl).scheme != 'https') {
+      throw StateError('Release builds require an HTTPS API_BASE_URL');
+    }
     dio = Dio(BaseOptions(
       baseUrl: AppConfig.baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -38,7 +41,8 @@ class NetworkService {
       },
       onResponse: (response, handler) async {
         if (kDebugMode && AppConfig.enableNetworkLogs) {
-          debugPrint('[HTTP] ${response.statusCode} ${response.requestOptions.uri}');
+          debugPrint(
+              '[HTTP] ${response.statusCode} ${response.requestOptions.uri}');
         }
         if (response.statusCode == 401) {
           await _storage.delete(key: 'jwt_token');

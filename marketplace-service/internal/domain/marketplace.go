@@ -2,23 +2,27 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
+var ErrForbidden = errors.New("not permitted for this job")
+var ErrConflict = errors.New("job or bid is not in an eligible state")
+
 type Job struct {
-	ID                 string    `json:"id"`
-	CustomerID         string    `json:"customer_id"`
-	Title              string    `json:"title"`
-	Description        string    `json:"description"`
-	Category           string    `json:"category"`
-	Status             string    `json:"status"`
-	MaxBudget          float64   `json:"max_budget"`
-	PaymentMethod      string    `json:"payment_method"`
-	IsEmergency        bool      `json:"is_emergency"`
-	Lat                float64   `json:"lat"`
-	Lng                float64   `json:"lng"`
-	AcceptedProviderID string    `json:"accepted_provider_id,omitempty"`
-	AcceptedBidAmount  float64   `json:"accepted_bid_amount,omitempty"`
+	ID                 string     `json:"id"`
+	CustomerID         string     `json:"customer_id"`
+	Title              string     `json:"title"`
+	Description        string     `json:"description"`
+	Category           string     `json:"category"`
+	Status             string     `json:"status"`
+	MaxBudget          float64    `json:"max_budget"`
+	PaymentMethod      string     `json:"payment_method"`
+	IsEmergency        bool       `json:"is_emergency"`
+	Lat                float64    `json:"lat"`
+	Lng                float64    `json:"lng"`
+	AcceptedProviderID string     `json:"accepted_provider_id,omitempty"`
+	AcceptedBidAmount  float64    `json:"accepted_bid_amount,omitempty"`
 	RecurrenceType     string     `json:"recurrence_type"` // ONCE, DAILY, WEEKLY, MONTHLY
 	TotalOccurrences   int        `json:"total_occurrences"`
 	ParentJobID        *string    `json:"parent_job_id,omitempty"`
@@ -48,7 +52,7 @@ type CreateJobRequest struct {
 	Description      string     `json:"description" binding:"required"`
 	Category         string     `json:"category" binding:"required"`
 	MaxBudget        float64    `json:"max_budget"`
-	PaymentMethod    string     `json:"payment_method" binding:"omitempty,oneof=ONLINE GCASH MAYA CASH"`
+	PaymentMethod    string     `json:"payment_method" binding:"omitempty,oneof=ONLINE CASH"`
 	IsEmergency      bool       `json:"is_emergency"`
 	Lat              float64    `json:"lat"`
 	Lng              float64    `json:"lng"`
@@ -59,18 +63,18 @@ type CreateJobRequest struct {
 }
 
 type CreateBidRequest struct {
-	Amount        float64 `json:"amount" binding:"required"`
+	Amount        float64 `json:"amount" binding:"required,gt=0"`
 	EstimatedTime string  `json:"estimated_time" binding:"required"`
 	Message       string  `json:"message"`
 }
 
 type CounterBidRequest struct {
-	Amount float64 `json:"amount" binding:"required"`
+	Amount float64 `json:"amount" binding:"required,gt=0"`
 	Reason string  `json:"reason"`
 }
 
 type CompleteJobRequest struct {
-	Score   int    `json:"score" binding:"required"`
+	Score   int    `json:"score" binding:"required,min=1,max=5"`
 	Comment string `json:"comment"`
 }
 
@@ -80,15 +84,15 @@ type MarketplaceRepository interface {
 	CreateJob(ctx context.Context, job *Job) error
 	CreateBid(ctx context.Context, bid *Bid) error
 	GetBidsByJobID(ctx context.Context, jobID string) ([]Bid, error)
-	AcceptBid(ctx context.Context, jobID, bidID string) error
-	RejectBid(ctx context.Context, jobID, bidID string, reason string) error
+	AcceptBid(ctx context.Context, jobID, bidID, userID string) error
+	RejectBid(ctx context.Context, jobID, bidID, userID string, reason string) error
 	CounterBid(ctx context.Context, bidID string, userID string, amount float64, reason string) error
 	CompleteJob(ctx context.Context, jobID, userID string, score int, comment string) error
 	GetBidsByProviderID(ctx context.Context, providerID string) ([]Bid, error)
 	GetJobsForProvider(ctx context.Context, providerID string) ([]Job, error)
 	GetJobsForCustomer(ctx context.Context, customerID string) ([]Job, error)
 	GetCategoryInsights(ctx context.Context, category string) (float64, int, error)
-	UpdateJobStatus(ctx context.Context, jobID string, status string) error
+	UpdateJobStatus(ctx context.Context, jobID, userID string, status string) error
 	CancelJob(ctx context.Context, jobID string, userID string) error
 }
 
@@ -98,14 +102,14 @@ type MarketplaceService interface {
 	PostJob(ctx context.Context, customerID string, req CreateJobRequest) (*Job, error)
 	PlaceBid(ctx context.Context, providerID, jobID string, req CreateBidRequest) (string, error)
 	ListBids(ctx context.Context, jobID string) ([]Bid, error)
-	AcceptOffer(ctx context.Context, jobID, bidID string) error
-	RejectOffer(ctx context.Context, jobID, bidID string, reason string) error
+	AcceptOffer(ctx context.Context, jobID, bidID, userID string) error
+	RejectOffer(ctx context.Context, jobID, bidID, userID string, reason string) error
 	CounterOffer(ctx context.Context, bidID string, userID string, req CounterBidRequest) error
 	MarkComplete(ctx context.Context, jobID, userID string, req CompleteJobRequest) error
 	ListProviderBids(ctx context.Context, providerID string) ([]Bid, error)
 	ListProviderJobs(ctx context.Context, providerID string) ([]Job, error)
 	ListCustomerJobs(ctx context.Context, customerID string) ([]Job, error)
 	GetInsights(ctx context.Context, category string) (float64, int, error)
-	UpdateJobStatus(ctx context.Context, jobID string, status string) error
+	UpdateJobStatus(ctx context.Context, jobID, userID string, status string) error
 	CancelJob(ctx context.Context, jobID string, userID string) error
 }

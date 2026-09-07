@@ -28,7 +28,7 @@ func (r *chatRepo) SaveMessage(ctx context.Context, msg *domain.Message) error {
 
 func (r *chatRepo) GetMessagesByJob(ctx context.Context, jobID string) ([]domain.Message, error) {
 	rows, err := r.db.Query(ctx,
-		"SELECT id, job_id, sender_id, content, created_at FROM messages WHERE job_id = $1 ORDER BY created_at ASC",
+		"SELECT id, job_id, COALESCE(sender_id::text,'SYSTEM'), content, created_at FROM messages WHERE job_id = $1 ORDER BY created_at ASC",
 		jobID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messages: %w", err)
@@ -48,4 +48,11 @@ func (r *chatRepo) GetMessagesByJob(ctx context.Context, jobID string) ([]domain
 		messages = []domain.Message{}
 	}
 	return messages, nil
+}
+
+func (r *chatRepo) IsParticipant(ctx context.Context, jobID, userID string) (bool, error) {
+	var allowed bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM jobs j WHERE j.id=$1 AND
+ (j.customer_id=$2 OR EXISTS(SELECT 1 FROM bids WHERE job_id=j.id AND provider_id=$2 AND status IN ('PENDING','COUNTERED','ACCEPTED'))))`, jobID, userID).Scan(&allowed)
+	return allowed, err
 }

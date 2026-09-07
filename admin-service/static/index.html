@@ -296,9 +296,62 @@
         </div>
         <div id="map"></div>
     </div>
+    <section class="map-section" aria-labelledby="verification-title">
+      <h2 id="verification-title">Verification requests</h2>
+      <p>Review the provider’s identity evidence before approving. Record what you checked in the review note.</p>
+      <div id="verification-requests" aria-live="polite">Loading requests…</div>
+    </section>
 </main>
 
 <script>
+    function adminURL(path) {
+        return (location.pathname.startsWith('/api/v1/admin/') ? '/api/v1/admin' : '') + path;
+    }
+    async function fetchVerificationRequests() {
+        const container = document.getElementById('verification-requests');
+        try {
+            const response = await fetch(adminURL('/api/verification-requests'), { credentials: 'include' });
+            if (!response.ok) throw new Error('Unable to load verification requests');
+            const requests = (await response.json()).filter(request => request.status === 'PENDING');
+            container.replaceChildren();
+            if (!requests.length) container.textContent = 'No pending requests.';
+            for (const request of requests) {
+                const form = document.createElement('form');
+                const name = document.createElement('p');
+                name.textContent = request.full_name + ' — ' + request.provider_id;
+                const note = document.createElement('textarea');
+                note.placeholder = 'Evidence reviewed and reason for decision';
+                note.setAttribute('aria-label', 'Verification review note');
+                note.required = true;
+                note.minLength = 10;
+                const approve = document.createElement('button');
+                approve.textContent = 'Approve';
+                approve.type = 'submit';
+                approve.value = 'approve';
+                const reject = document.createElement('button');
+                reject.textContent = 'Reject';
+                reject.type = 'submit';
+                reject.value = 'reject';
+                form.append(name, note, approve, reject);
+                form.addEventListener('submit', async event => {
+                    event.preventDefault();
+                    approve.disabled = reject.disabled = true;
+                    try {
+                        const result = await fetch(adminURL('/api/providers/' + encodeURIComponent(request.provider_id) + '/verification'), {
+                            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ approve: event.submitter.value === 'approve', note: note.value })
+                        });
+                        if (!result.ok) throw new Error('Review could not be saved; refresh and try again.');
+                        await fetchVerificationRequests();
+                        fetchStats();
+                    } catch (error) { showError(error.message); }
+                    finally { approve.disabled = reject.disabled = false; }
+                });
+                container.append(form);
+            }
+        } catch (error) { container.textContent = error.message; }
+    }
+
     // ── Map Init ──────────────────────────────────────────────────────
     const map = L.map('map').setView([14.5995, 120.9842], 12); // Metro Manila default
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -345,7 +398,7 @@
 
     // ── Stats Fetch ───────────────────────────────────────────────────
     function fetchStats() {
-        fetch('/api/stats', { credentials: 'include' })
+        fetch(adminURL('/api/stats'), { credentials: 'include' })
             .then(r => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
@@ -403,6 +456,7 @@
 
     // ── Bootstrap ─────────────────────────────────────────────────────
     fetchStats();
+    fetchVerificationRequests();
     pollProviderLocations();
 
     // Auto-refresh every 30 seconds
