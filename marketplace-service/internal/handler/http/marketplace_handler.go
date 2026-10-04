@@ -50,6 +50,15 @@ func (h *MarketplaceHandler) GetJobs(c *gin.Context) {
 		writeError(c, err, "Failed to fetch jobs")
 		return
 	}
+	for i := range jobs {
+		jobs[i] = jobs[i].ForViewer(middleware.GetUserID(c))
+		// Photos and private intake are fetched on the authenticated detail route.
+		if jobs[i].Booking != nil {
+			copy := *jobs[i].Booking
+			copy.Private = nil
+			jobs[i].Booking = &copy
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
 }
 
@@ -60,7 +69,7 @@ func (h *MarketplaceHandler) GetJobByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
 		return
 	}
-	c.JSON(http.StatusOK, job)
+	c.JSON(http.StatusOK, job.ForViewer(middleware.GetUserID(c)))
 }
 
 func (h *MarketplaceHandler) PostJob(c *gin.Context) {
@@ -70,6 +79,7 @@ func (h *MarketplaceHandler) PostJob(c *gin.Context) {
 		return
 	}
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 15*1024*1024)
 	var req domain.CreateJobRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -78,6 +88,10 @@ func (h *MarketplaceHandler) PostJob(c *gin.Context) {
 
 	job, err := h.service.PostJob(c.Request.Context(), userID, req)
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidBooking) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		writeError(c, err, "Failed to create job")
 		return
 	}
@@ -209,6 +223,15 @@ func (h *MarketplaceHandler) GetProviderJobs(c *gin.Context) {
 		writeError(c, err, "Failed to fetch jobs")
 		return
 	}
+	for i := range jobs {
+		jobs[i] = jobs[i].ForViewer(middleware.GetUserID(c))
+		// Photos and private intake are fetched on the authenticated detail route.
+		if jobs[i].Booking != nil {
+			copy := *jobs[i].Booking
+			copy.Private = nil
+			jobs[i].Booking = &copy
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
 }
 
@@ -223,6 +246,15 @@ func (h *MarketplaceHandler) GetCustomerJobs(c *gin.Context) {
 	if err != nil {
 		writeError(c, err, "Failed to fetch service history")
 		return
+	}
+	for i := range jobs {
+		jobs[i] = jobs[i].ForViewer(middleware.GetUserID(c))
+		// Photos and private intake are fetched on the authenticated detail route.
+		if jobs[i].Booking != nil {
+			copy := *jobs[i].Booking
+			copy.Private = nil
+			jobs[i].Booking = &copy
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": jobs})
 }

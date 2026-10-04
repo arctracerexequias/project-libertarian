@@ -142,6 +142,7 @@ class Establishment {
 }
 
 class Job {
+  final Map<String, dynamic>? booking;
   final String id;
   final String customerId;
   final String title;
@@ -159,6 +160,7 @@ class Job {
   final DateTime createdAt;
 
   Job({
+    this.booking,
     required this.id,
     required this.customerId,
     required this.title,
@@ -178,6 +180,9 @@ class Job {
 
   factory Job.fromJson(Map<String, dynamic> json) {
     return Job(
+      booking: json['booking'] == null
+          ? null
+          : Map<String, dynamic>.from(json['booking']),
       id: json['id'],
       customerId: json['customer_id'] ?? '',
       title: json['title'],

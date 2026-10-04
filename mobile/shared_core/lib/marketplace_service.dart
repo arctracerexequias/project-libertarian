@@ -7,6 +7,7 @@ class MarketplaceService {
   final Dio _dio = NetworkService().dio;
 
   MarketplaceService();
+  String? lastCreateError;
 
   Future<List<Job>> getJobs(
       {String? category, double? lat, double? lng, double? radius}) async {
@@ -205,11 +206,16 @@ class MarketplaceService {
     int totalOccurrences = 1,
     String? parentJobId,
     DateTime? scheduledAt,
+    Map<String, dynamic>? booking,
+    String? requestId,
   }) async {
+    lastCreateError = null;
     try {
       final response = await _dio.post(
         '/marketplace/jobs/',
         data: {
+          if (booking != null) 'booking': booking,
+          if (requestId != null) 'request_id': requestId,
           'title': title,
           'description': description,
           'category': category,
@@ -231,16 +237,18 @@ class MarketplaceService {
         final json = response.data;
         return Job.fromJson(json);
       } else {
-        print(
-            'Create job failed with status: ${response.statusCode}, data: ${response.data}');
+        lastCreateError = response.statusCode == 400 && response.data is Map
+            ? response.data['error']?.toString()
+            : response.statusCode == 401
+                ? 'Please sign in again before submitting your request.'
+                : 'Could not confirm your request. Your details are still here; retry safely.';
       }
     } catch (e) {
-      if (e is DioException) {
-        print(
-            'Create job DioError: ${e.response?.statusCode} - ${e.response?.data}');
-      } else {
-        print('Create job error: $e');
-      }
+      lastCreateError = e is DioException && e.response?.statusCode == 400
+          ? (e.response?.data is Map
+              ? e.response?.data['error']?.toString()
+              : null)
+          : 'Could not confirm your request. Retry safely with the same details, or go back to review.';
     }
     return null;
   }

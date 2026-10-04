@@ -6,10 +6,13 @@ import (
 	"time"
 )
 
+var ErrInvalidBooking = errors.New("invalid booking")
+
 var ErrForbidden = errors.New("not permitted for this job")
 var ErrConflict = errors.New("job or bid is not in an eligible state")
 
 type Job struct {
+	Booking            *Booking   `json:"booking,omitempty"`
 	ID                 string     `json:"id"`
 	CustomerID         string     `json:"customer_id"`
 	Title              string     `json:"title"`
@@ -48,6 +51,8 @@ type Bid struct {
 }
 
 type CreateJobRequest struct {
+	Booking          *Booking   `json:"booking,omitempty"`
+	RequestID        string     `json:"request_id" binding:"omitempty,uuid"`
 	Title            string     `json:"title" binding:"required"`
 	Description      string     `json:"description" binding:"required"`
 	Category         string     `json:"category" binding:"required"`

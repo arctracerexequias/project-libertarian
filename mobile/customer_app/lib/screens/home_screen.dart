@@ -151,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _referFriend() async {
     const message =
         'Try ODG for trusted home, vehicle, device, and personal services. '
-        'Join using my referral code ODG-FRIEND.';
+        'Find help for home repairs and personal services.';
     await Clipboard.setData(const ClipboardData(text: message));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -250,7 +250,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   _ExtraShortcut(
                                     'Job Requests',
                                     Icons.handyman_rounded,
-                                    () => _openJobForm(),
+                                    () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                CustomerHistoryScreen(
+                                                    refreshSignal: widget
+                                                        .historyRefresh))),
                                   ),
                                   _ExtraShortcut(
                                     'Promos',
@@ -608,7 +614,7 @@ class _AdSpace extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Save 10% on your next service',
+                  'Offers and updates',
                   style: TextStyle(
                     color: Color(0xFF6666FF),
                     fontFamily: 'serif',
@@ -1053,19 +1059,15 @@ class PersonalServicesScreen extends StatelessWidget {
   });
 
   static const _services = <_RepairType>[
-    _RepairType('Barber', Icons.content_cut_rounded),
-    _RepairType('Manicure & Pedicure', Icons.back_hand_rounded),
-    _RepairType(
-        'Hair Styling, Coloring & Care', Icons.face_retouching_natural_rounded),
     _RepairType('Massage', Icons.spa_rounded),
-    _RepairType('Elderly Care', Icons.elderly_rounded),
-    _RepairType('Child Care', Icons.child_care_rounded),
-    _RepairType('Physical Therapy', Icons.accessibility_new_rounded),
-    _RepairType('Occupational Therapy', Icons.health_and_safety_rounded),
-    _RepairType('Tutorial Services', Icons.school_rounded),
-    _RepairType('House Keeping', Icons.cleaning_services_rounded),
-    _RepairType('Pet Grooming', Icons.pets_rounded),
-    _RepairType('Laundry & Ironing', Icons.local_laundry_service_rounded),
+    _RepairType('Nail Care', Icons.back_hand_rounded),
+    _RepairType('Tailoring', Icons.content_cut_rounded),
+    _RepairType('Housekeeping', Icons.cleaning_services_rounded),
+    _RepairType('Landscaping', Icons.park_rounded),
+    _RepairType('Babysitting', Icons.child_care_rounded),
+    _RepairType('Caregiving / Nursing', Icons.elderly_rounded),
+    _RepairType('Pet Care', Icons.pets_rounded),
+    _RepairType('Tutorial', Icons.school_rounded),
   ];
 
   void _openBooking(BuildContext context, String service) {
@@ -1398,191 +1400,49 @@ class _RepairType {
 
 class CustomerPromosScreen extends StatelessWidget {
   final VoidCallback onUsePromo;
-
   const CustomerPromosScreen({super.key, required this.onUsePromo});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _pageBackground,
-      appBar: AppBar(title: const Text('Promos')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Offers for you',
-            style: TextStyle(
-              color: _brandBlueDark,
-              fontFamily: 'serif',
-              fontSize: 27,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _PromoCard(
-            icon: Icons.home_repair_service_rounded,
-            title: '10% off your first booking',
-            description: 'Valid on any service. Maximum discount of ₱250.',
-            code: 'FIRST10',
-            onUse: onUsePromo,
-          ),
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _pageBackground,
+        appBar: AppBar(title: const Text('Promos')),
+        body: ListView(padding: const EdgeInsets.all(24), children: [
+          const Icon(Icons.local_offer_outlined, color: _brandBlue, size: 64),
+          const SizedBox(height: 20),
+          const Text('No active promotions',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          _PromoCard(
-            icon: Icons.people_alt_rounded,
-            title: 'Refer a friend',
-            description:
-                'Copy your invite message and earn rewards after their first completed job.',
-            code: 'ODG-FRIEND',
-            onUse: () async {
-              await Clipboard.setData(
-                const ClipboardData(
-                  text:
-                      'Try ODG for trusted local services. Use referral code ODG-FRIEND.',
-                ),
-              );
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Referral message copied!')),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PromoCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  final String code;
-  final VoidCallback onUse;
-
-  const _PromoCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.code,
-    required this.onUse,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFFE0F2F8),
-                  child: Icon(icon, color: _brandBlue),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(description),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'CODE: $code',
-                    style: const TextStyle(
-                      color: _brandBlueDark,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: .5,
-                    ),
-                  ),
-                ),
-                FilledButton(onPressed: onUse, child: const Text('Use offer')),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+          const Text('There are no discounts available to apply at this time.'),
+          const SizedBox(height: 24),
+          FilledButton(
+              onPressed: onUsePromo, child: const Text('Book a service')),
+        ]),
+      );
 }
 
 class CustomerRewardsScreen extends StatelessWidget {
   const CustomerRewardsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final profile = AuthService().currentUser;
-    final completed = profile?.completedJobsCount ?? 0;
-    final points = completed * 100;
-    final progress = (completed / 10).clamp(0.0, 1.0);
-
-    return Scaffold(
-      backgroundColor: _pageBackground,
-      appBar: AppBar(title: const Text('Rewards')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: _brandBlue,
-              borderRadius: BorderRadius.circular(20),
-            ),
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _pageBackground,
+        appBar: AppBar(title: const Text('Rewards')),
+        body: const Padding(
+            padding: EdgeInsets.all(24),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.diamond_rounded,
-                    color: Colors.white, size: 64),
-                const SizedBox(height: 8),
+                Icon(Icons.diamond_outlined, color: _brandBlue, size: 64),
+                SizedBox(height: 20),
+                Text('Rewards are not available yet',
+                    style:
+                        TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                SizedBox(height: 12),
                 Text(
-                  '$points points',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'serif',
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  '$completed completed ${completed == 1 ? 'service' : 'services'}',
-                  style: const TextStyle(color: Colors.white70),
-                ),
+                    'There are no points to earn or rewards to redeem at this time.'),
               ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Your next reward',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          LinearProgressIndicator(value: progress, minHeight: 10),
-          const SizedBox(height: 8),
-          Text(
-              '${10 - completed.clamp(0, 10)} more services to unlock a priority-support reward'),
-          const SizedBox(height: 24),
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.stars_rounded, color: _brandBlue),
-              title: Text('How points work'),
-              subtitle:
-                  Text('Earn 100 points for every completed service request.'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+            )),
+      );
 }
 
 class CustomerHelpScreen extends StatelessWidget {
@@ -1592,41 +1452,25 @@ class CustomerHelpScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) => Padding(
+      builder: (sheetContext) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Contact support',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            const Text('Tell us what you need help with.'),
-            const SizedBox(height: 16),
-            TextField(
-              minLines: 3,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                hintText: 'Describe your concern',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => Navigator.pop(context),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Support request submitted.')),
-                );
-              },
-              icon: const Icon(Icons.send_rounded),
-              label: const Text('Submit request'),
-            ),
-          ],
-        ),
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Support messaging is not available yet',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text(
+                  'For booking questions, read the help guide. For an accepted service, you can message your provider from the request details.'),
+              const SizedBox(height: 20),
+              FilledButton(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _showFaq(context);
+                  },
+                  child: const Text('Read help guide')),
+            ]),
       ),
     );
   }

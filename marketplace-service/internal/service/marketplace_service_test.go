@@ -114,3 +114,27 @@ func TestInvalidBidAndRatingRejected(t *testing.T) {
 		t.Fatal("invalid rating allowed")
 	}
 }
+
+func TestRetryReturnsOriginalJobAndScopesKeyToCustomer(t *testing.T) {
+	repo := newMockMarketplaceRepo()
+	svc := NewMarketplaceService(repo)
+	req := domain.CreateJobRequest{Title: "Care request", Description: "Help at home", Category: "Personal Care > Caregiving / Nursing", MaxBudget: 1500, RequestID: "bc781d8f-7d64-4d51-8ea7-13dbaedfcf37", PaymentMethod: "CASH"}
+	first, err := svc.PostJob(context.Background(), "owner", req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := svc.PostJob(context.Background(), "owner", req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != second.ID || len(repo.jobs) != 1 {
+		t.Fatal("retry duplicated the request")
+	}
+	other, err := svc.PostJob(context.Background(), "another-owner", req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.ID == first.ID || other.CustomerID != "another-owner" {
+		t.Fatal("request identity crossed accounts")
+	}
+}

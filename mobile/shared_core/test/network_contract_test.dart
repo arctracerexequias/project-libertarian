@@ -55,6 +55,21 @@ void main() {
     expect(adapter.request!.data, {'active': false});
   });
 
+  test('booking validation errors remain visible when Dio accepts HTTP 400',
+      () async {
+    adapter.status = 400;
+    adapter.body = {'error': 'Service end must be after the start'};
+    final marketplace = MarketplaceService();
+    final job = await marketplace.createJob(
+        title: 'Garden',
+        description: 'Trim garden',
+        category: 'Landscaping',
+        maxBudget: 600,
+        paymentMethod: 'CASH');
+    expect(job, isNull);
+    expect(marketplace.lastCreateError, 'Service end must be after the start');
+  });
+
   test('verification submits a request rather than marking the user verified',
       () async {
     adapter.status = 202;

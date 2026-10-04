@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,8 +28,34 @@ func (s *marketplaceService) GetJob(ctx context.Context, id string) (*domain.Job
 }
 
 func (s *marketplaceService) PostJob(ctx context.Context, customerID string, req domain.CreateJobRequest) (*domain.Job, error) {
+	if strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Description) == "" || req.MaxBudget <= 0 || math.IsNaN(req.MaxBudget) || math.IsInf(req.MaxBudget, 0) {
+		return nil, fmt.Errorf("%w: enter a title, description and positive offer", domain.ErrInvalidBooking)
+	}
+	id := uuid.New().String()
+	if req.RequestID != "" {
+		if _, err := uuid.Parse(req.RequestID); err != nil {
+			return nil, fmt.Errorf("%w: invalid request ID", domain.ErrInvalidBooking)
+		}
+		id = uuid.NewSHA1(uuid.NameSpaceOID, []byte(customerID+":"+req.RequestID)).String()
+		// A retry after a lost response returns the original persisted job.
+		if existing, err := s.repo.GetJobByID(ctx, id); err == nil {
+			return existing, nil
+		}
+	}
+	start := req.ScheduledAt
+	if req.IsEmergency {
+		now := time.Now()
+		start = &now
+	}
+	if err := req.Booking.Validate(start, req.MaxBudget); err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidBooking, err)
+	}
+	if req.Booking != nil && !req.IsEmergency && (start == nil || start.Before(time.Now().Add(-time.Minute))) {
+		return nil, fmt.Errorf("%w: choose a future service date", domain.ErrInvalidBooking)
+	}
 	job := &domain.Job{
-		ID:               uuid.New().String(),
+		ID:               id,
+		Booking:          req.Booking,
 		CustomerID:       customerID,
 		Title:            req.Title,
 		Description:      req.Description,
@@ -41,7 +69,7 @@ func (s *marketplaceService) PostJob(ctx context.Context, customerID string, req
 		RecurrenceType:   req.RecurrenceType,
 		TotalOccurrences: req.TotalOccurrences,
 		ParentJobID:      req.ParentJobID,
-		ScheduledAt:      req.ScheduledAt,
+		ScheduledAt:      start,
 		CreatedAt:        time.Now(),
 	}
 	if job.ParentJobID != nil && *job.ParentJobID == "" {
@@ -57,6 +85,9 @@ func (s *marketplaceService) PostJob(ctx context.Context, customerID string, req
 		job.PaymentMethod = "ONLINE"
 	}
 	err := s.repo.CreateJob(ctx, job)
+	if err == nil && req.RequestID != "" {
+		return s.repo.GetJobByID(ctx, id)
+	}
 	return job, err
 }
 

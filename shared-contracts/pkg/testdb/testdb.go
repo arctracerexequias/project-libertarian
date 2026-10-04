@@ -54,6 +54,13 @@ func Open(t *testing.T) *pgxpool.Pool {
 	if _, err = pool.Exec(ctx, string(migration)); err != nil {
 		t.Fatal(err)
 	}
+	migration, err = os.ReadFile(filepath.Join(filepath.Dir(file), "../../..", "database/migrations/000008_booking_details.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(migration)); err != nil {
+		t.Fatal(err)
+	}
 	return pool
 }
 func Exec(t *testing.T, pool *pgxpool.Pool, query string, args ...interface{}) {

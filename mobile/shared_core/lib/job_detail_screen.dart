@@ -6,6 +6,7 @@ import 'marketplace_service.dart';
 import 'payment_service.dart';
 import 'auth_service.dart';
 import 'models.dart';
+import 'booking_summary.dart';
 import 'view_bids_screen.dart';
 import 'chat_screen.dart';
 import 'rating_dialog.dart';
@@ -33,6 +34,8 @@ class _JobDetailScreenState extends State<JobDetailScreen>
   UserProfile? _userProfile;
   Map<String, dynamic>? _escrowStatus;
 
+  Job? _loadedJob;
+  bool _bookingLoadFailed = false;
   late JobStatus _currentStatus;
   bool _statusUpdated = false;
   bool _isBacking = false;
@@ -46,12 +49,22 @@ class _JobDetailScreenState extends State<JobDetailScreen>
     _currentStatus = widget.job.status;
     _fetchEscrowStatus();
     _fetchProfile();
+    _fetchJobDetails();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _fetchJobDetails() async {
+    final job = await _marketplaceService.getJob(widget.job.id);
+    if (!mounted) return;
+    setState(() {
+      _loadedJob = job;
+      _bookingLoadFailed = job == null;
+    });
   }
 
   Future<void> _fetchProfile() async {
@@ -90,7 +103,10 @@ class _JobDetailScreenState extends State<JobDetailScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _fetchEscrowStatus();
+    if (state == AppLifecycleState.resumed) {
+      _fetchEscrowStatus();
+      _fetchJobDetails();
+    }
   }
 
   void _fundEscrow() async {
@@ -182,6 +198,7 @@ class _JobDetailScreenState extends State<JobDetailScreen>
             _statusUpdated = true;
           });
           _fetchEscrowStatus();
+          _fetchJobDetails();
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -502,8 +519,21 @@ class _JobDetailScreenState extends State<JobDetailScreen>
                 ],
               ),
               const SizedBox(height: 16),
-              Text(widget.job.description,
+              Text((_loadedJob ?? widget.job).description,
                   style: const TextStyle(fontSize: 16, height: 1.4)),
+              if (_loadedJob != null)
+                BookingSummary(job: _loadedJob!)
+              else if (_bookingLoadFailed)
+                TextButton.icon(
+                  onPressed: _fetchJobDetails,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry loading service details'),
+                )
+              else if (widget.job.booking != null)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: LinearProgressIndicator(),
+                ),
               if (_acceptedBid != null) ...[
                 const SizedBox(height: 16),
                 Card(

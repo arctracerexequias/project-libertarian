@@ -1,3 +1,4 @@
+import 'package:shared_core/personal_service_form.dart';
 import 'package:customer_app/screens/home_screen.dart';
 import 'package:customer_app/main.dart' show CustomerBottomMenu;
 import 'package:flutter/material.dart';
@@ -32,6 +33,16 @@ void main() {
     expect(find.text('Personal Services'), findsOneWidget);
     expect(find.text('Job Requests'), findsOneWidget);
     expect(find.text('Rewards'), findsOneWidget);
+  });
+
+  testWidgets('unsupported promotions and rewards do not promise credit',
+      (tester) async {
+    await tester
+        .pumpWidget(MaterialApp(home: CustomerPromosScreen(onUsePromo: () {})));
+    expect(find.text('No active promotions'), findsOneWidget);
+    expect(find.text('Use offer'), findsNothing);
+    await tester.pumpWidget(const MaterialApp(home: CustomerRewardsScreen()));
+    expect(find.text('Rewards are not available yet'), findsOneWidget);
   });
 
   testWidgets('customer shell uses the four-item reference bottom menu',
@@ -69,7 +80,7 @@ void main() {
     await tester.pumpWidget(constrainedApp(const HomeScreen()));
     await tester.pump();
 
-    expect(find.text('Save 10% on your next service'), findsOneWidget);
+    expect(find.text('Offers and updates'), findsOneWidget);
     expect(find.text('View available promos'), findsOneWidget);
     expect(find.text('Be a Service Provider!'), findsOneWidget);
     final scrollable = tester.state<ScrollableState>(
@@ -122,18 +133,15 @@ void main() {
     );
 
     const services = [
-      'Barber',
-      'Manicure & Pedicure',
-      'Hair Styling, Coloring & Care',
       'Massage',
-      'Elderly Care',
-      'Child Care',
-      'Physical Therapy',
-      'Occupational Therapy',
-      'Tutorial Services',
-      'House Keeping',
-      'Pet Grooming',
-      'Laundry & Ironing',
+      'Nail Care',
+      'Tailoring',
+      'Housekeeping',
+      'Landscaping',
+      'Babysitting',
+      'Caregiving / Nursing',
+      'Pet Care',
+      'Tutorial',
     ];
     for (final service in services) {
       final visibleLabel =
@@ -145,25 +153,6 @@ void main() {
       );
       expect(find.text(visibleLabel), findsOneWidget);
     }
-  });
-
-  testWidgets('occupational therapy uses a balanced two-line label',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PersonalServicesScreen(
-          initialLocation: null,
-          onJobCreated: () {},
-        ),
-      ),
-    );
-
-    final label = tester.widget<Text>(find.text('Occupational\nTherapy'));
-    expect(label.data, 'Occupational\nTherapy');
-    expect(label.maxLines, 2);
-    expect(label.softWrap, isFalse);
-    expect(label.semanticsLabel, 'Occupational Therapy');
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('notification bell opens notifications and clears unread badge',
@@ -199,7 +188,7 @@ void main() {
       ),
     );
     final personalLabel = tester.widget<Text>(
-      find.text('Hair Styling, Coloring & Care'),
+      find.text('Caregiving / Nursing'),
     );
     expect(personalLabel.maxLines, isNull);
 
@@ -253,21 +242,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('every chosen personal service uses the same booking pattern',
+  testWidgets('every chosen personal service starts with its dedicated intake',
       (tester) async {
     const services = [
-      'Barber',
-      'Manicure & Pedicure',
-      'Hair Styling, Coloring & Care',
       'Massage',
-      'Elderly Care',
-      'Child Care',
-      'Physical Therapy',
-      'Occupational Therapy',
-      'Tutorial Services',
-      'House Keeping',
-      'Pet Grooming',
-      'Laundry & Ironing',
+      'Nail Care',
+      'Tailoring',
+      'Housekeeping',
+      'Landscaping',
+      'Babysitting',
+      'Caregiving / Nursing',
+      'Pet Care',
+      'Tutorial',
     ];
 
     for (final service in services) {
@@ -284,9 +270,8 @@ void main() {
 
       expect(find.text('Personal Services'), findsOneWidget);
       expect(find.text(service), findsOneWidget);
-      expect(find.text('Home / Building / Unit Number'), findsOneWidget);
-      expect(find.text('Contact Number'), findsOneWidget);
-      expect(find.text('Set to Immediately'), findsOneWidget);
+      expect(find.byType(PersonalServiceForm), findsOneWidget);
+      expect(find.text('Home / Building / Unit Number'), findsNothing);
       expect(find.text('NEXT'), findsOneWidget);
     }
   });

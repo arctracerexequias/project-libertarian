@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -5,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 
 import 'marketplace_service.dart';
 import 'models.dart';
+import 'personal_service_form.dart';
 
 const _odgBlue = Color(0xFF006D99);
 const _odgPale = Color(0xFFB5CCDA);
@@ -67,7 +72,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool? _requiresHomeService;
   bool? _requiresPickup;
   LatLng? _location;
-  final List<XFile> _photos = [];
+  final List<({String name, Uint8List bytes})> _photos = [];
+  final Map<String, dynamic> _answers = {};
+  String? _requestID;
+  String? _submissionFingerprint;
+  DateTime? _submittedAt;
+  String? _submissionError;
+  final _scroll = ScrollController();
 
   String _category = 'Home Repair';
   String _subcategory = 'Carpentry';
@@ -83,8 +94,28 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       (widget.initialCategory?.contains(' > ') ?? false);
   bool get _isSpecialized =>
       _isVehicleRepair || _isApplianceRepair || _isDeviceRepair;
-  int get _reviewStep => _isSpecialized ? 4 : 2;
-  int get _resultStep => _isSpecialized ? 5 : 3;
+  bool get _isPersonal =>
+      _category == 'Personal Care' &&
+      personalServices.containsKey(_subcategory);
+  int get _locationStep => _isPersonal ? 1 : (_isSpecialized ? 2 : 0);
+  int get _detailsStep => _locationStep + 1;
+  int get _reviewStep => _locationStep + 2;
+  int get _resultStep => _reviewStep + 1;
+  bool get _perWorker =>
+      !_isSpecialized && !_isPersonal ||
+      _isPersonal && _subcategory == 'Landscaping';
+  int get _effectiveWorkers => _isPersonal
+      ? (_subcategory == 'Landscaping'
+          ? int.tryParse('${_answers['providers']}') ?? 1
+          : 1)
+      : (_isSpecialized ? 1 : _workerCount ?? 1);
+  String get _schedule =>
+      '${_immediate ? 'Immediately' : _start == null ? 'Not selected' : _formatDate(_start!)} to ${_asap ? 'ASAP' : _end == null ? 'Not selected' : _formatDate(_end!)}';
+
+  void _toStep(int step) {
+    setState(() => _step = step);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
 
   double? get _offerAmount => double.tryParse(
         _budget.text.replaceAll('₱', '').replaceAll(',', '').trim(),
@@ -116,17 +147,19 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       'Detailing',
     ],
     'Personal Care': [
-      'Barber',
-      'Manicure & Pedicure',
-      'Hair Styling, Coloring & Care',
       'Massage',
-      'Elderly Care',
-      'Child Care',
+      'Nail Care',
+      'Tailoring',
+      'Housekeeping',
+      'Landscaping',
+      'Babysitting',
+      'Caregiving / Nursing',
+      'Pet Care',
+      'Tutorial',
+      'Barber',
+      'Hair Styling, Coloring & Care',
       'Physical Therapy',
       'Occupational Therapy',
-      'Tutorial Services',
-      'House Keeping',
-      'Pet Grooming',
       'Laundry & Ironing',
     ],
     'Device Repair': [
@@ -152,10 +185,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   @override
   void initState() {
     super.initState();
-    _location = widget.initialLocation;
+    // A booking may be for a different address than the customer’s current GPS position.
+    _location = null;
     _title.text = widget.initialTitle ?? '';
     _description.text = widget.initialDescription ?? '';
-    final parts = widget.initialCategory?.split(' > ') ?? const <String>[];
+    final parts = widget.initialCategory?.split(' > ') ?? <String>[];
+    if (parts.length > 1 && parts.first == 'Personal Care')
+      parts[1] = canonicalPersonalService(parts[1]);
     if (parts.isNotEmpty && _subcategories.containsKey(parts.first)) {
       _category = parts.first;
       _subcategory =
@@ -177,6 +213,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
   @override
   void dispose() {
+    _scroll.dispose();
     _address.dispose();
     _contact.dispose();
     _title.dispose();
@@ -204,7 +241,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
-    if (time == null) return;
+    if (time == null || !mounted) return;
     setState(() {
       final value = DateTime(
           picked.year, picked.month, picked.day, time.hour, time.minute);
@@ -219,14 +256,56 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   }
 
   Future<void> _attachPhotos() async {
-    final files = await _picker.pickMultiImage(imageQuality: 80);
-    if (!mounted || files.isEmpty) return;
-    setState(() {
-      _photos
-        ..clear()
-        ..addAll(files.take(5));
-    });
+    try {
+      final files = await _picker.pickMultiImage(
+          imageQuality: 80, maxWidth: 1920, maxHeight: 1920);
+      for (final file in files) {
+        if (_photos.length >= 5) {
+          if (mounted) _message('Attach up to five photos.');
+          break;
+        }
+        final bytes = await file.readAsBytes();
+        if (!mounted) return;
+        final jpeg = bytes.length > 3 && bytes[0] == 0xff && bytes[1] == 0xd8;
+        final png = bytes.length > 8 &&
+            bytes[0] == 0x89 &&
+            bytes[1] == 0x50 &&
+            bytes[2] == 0x4e &&
+            bytes[3] == 0x47;
+        if (bytes.length > 2 * 1024 * 1024 || (!jpeg && !png)) {
+          _message('Use JPEG or PNG photos up to 2 MB each.');
+          continue;
+        }
+        setState(() => _photos.add((name: file.name, bytes: bytes)));
+      }
+    } catch (_) {
+      if (mounted)
+        _message(
+            'Could not read photos. Check photo permissions and try again.');
+    }
   }
+
+  Widget _photoPreview({bool editable = false}) => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (var i = 0; i < _photos.length; i++)
+            SizedBox(
+                width: 100,
+                child: Column(children: [
+                  Image.memory(_photos[i].bytes,
+                      width: 100,
+                      height: 90,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.broken_image)),
+                  if (editable)
+                    TextButton(
+                        onPressed: () => setState(() => _photos.removeAt(i)),
+                        child: const Text('Remove photo')),
+                ])),
+        ],
+      );
 
   Future<void> _useCurrentLocation() async {
     final location = await _resolveLocation();
@@ -238,7 +317,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     setState(() {
       _location = location;
       if (_address.text.trim().isEmpty) {
-        _address.text = 'Current location selected';
+        _message('Location pinned. Enter the complete service address below.');
       }
     });
     _message('Current location added to this request.');
@@ -259,9 +338,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       if (_step == 1 &&
           (_vehicleBrand.text.trim().isEmpty ||
               _vehicleModel.text.trim().isEmpty ||
-              int.tryParse(_vehicleYear.text) == null ||
+              (int.tryParse(_vehicleYear.text) ?? 0) < 1900 ||
+              (int.tryParse(_vehicleYear.text) ?? 0) >
+                  DateTime.now().year + 1 ||
               _canBringToShop == null ||
-              _needsTowing == null ||
+              (_canBringToShop == true && _needsTowing == null) ||
               _isRegisteredOwner == null)) {
         _message('Complete the vehicle details and service questions.');
         return false;
@@ -287,24 +368,42 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       }
       if (_step == 1 &&
           (_applianceBrand.text.trim().isEmpty ||
+              _applianceModel.text.trim().isEmpty ||
               _requiresHomeService == null ||
               (_requiresHomeService == false && _requiresPickup == null))) {
         _message('Complete the device and service details.');
         return false;
       }
     }
-    final locationStep = _isSpecialized ? 2 : 0;
-    final detailsStep = _isSpecialized ? 3 : 1;
+    if (_isPersonal && _step == 0) {
+      final error = validatePersonalAnswers(_subcategory, _answers);
+      if (error != null) {
+        _message(error);
+        return false;
+      }
+    }
+    final locationStep = _locationStep;
+    final detailsStep = _detailsStep;
     if (_step == locationStep) {
       if (_address.text.trim().isEmpty ||
-          _barangay == null ||
-          _city == null ||
-          _contact.text.trim().length < 7) {
+          (_barangay ?? '').trim().isEmpty ||
+          (_city ?? '').trim().isEmpty ||
+          !RegExp(r'^\+?[0-9 ()-]{7,25}$').hasMatch(_contact.text.trim()) ||
+          _contact.text.replaceAll(RegExp(r'\D'), '').length < 7) {
         _message('Complete the address and contact information.');
         return false;
       }
       if ((!_immediate && _start == null) || (!_asap && _end == null)) {
         _message('Select the service dates.');
+        return false;
+      }
+      final now = DateTime.now();
+      if (!_immediate && !_start!.isAfter(now)) {
+        _message('Choose a future service start.');
+        return false;
+      }
+      if (!_asap && !_end!.isAfter(_immediate ? now : _start!)) {
+        _message('Service end must be after the start.');
         return false;
       }
     }
@@ -317,11 +416,18 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _message('Describe the job using at least 10 characters.');
         return false;
       }
-      if ((_offerAmount ?? 0) <= 0) {
-        _message('Enter a valid offer amount greater than zero.');
+      if ((_offerAmount ?? 0) <= 0 ||
+          !(_offerAmount ?? 0).isFinite ||
+          (_offerAmount ?? 0) > 10000000) {
+        _message('Enter an offer greater than zero, up to ₱10,000,000.');
         return false;
       }
-      if (!_isSpecialized && (_workerCount ?? 0) <= 0) {
+      if (((_offerAmount! * 100) - (_offerAmount! * 100).round()).abs() >
+          0.00001) {
+        _message('Use no more than two decimal places for the offer.');
+        return false;
+      }
+      if (_perWorker && (_effectiveWorkers <= 0 || _effectiveWorkers > 120)) {
         _message('Enter a valid number of workers.');
         return false;
       }
@@ -338,7 +444,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     if (_step == _reviewStep) {
       _submit();
     } else {
-      setState(() => _step++);
+      _toStep(_step + 1);
     }
   }
 
@@ -346,12 +452,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     if (_step == 0) {
       Navigator.pop(context);
     } else {
-      setState(() => _step--);
+      _toStep(_step - 1);
     }
   }
 
   Future<LatLng?> _resolveLocation() async {
     if (_location != null) return _location;
+    if (widget.initialLocation != null) return widget.initialLocation;
     try {
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -359,7 +466,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       }
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
-        final position = await Geolocator.getCurrentPosition();
+        final position = await Geolocator.getCurrentPosition()
+            .timeout(const Duration(seconds: 10));
         return LatLng(position.latitude, position.longitude);
       }
     } catch (_) {
@@ -369,68 +477,117 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
-    final location = await _resolveLocation();
-    final workers = _isSpecialized ? 1 : (_workerCount ?? 1);
-    final details = [
-      _description.text.trim(),
-      '',
-      'Address: ${_address.text.trim()}, $_barangay, $_city',
-      'Contact: ${_contact.text.trim()}',
-      'Workers requested: $workers',
-      'Payment: $_payment',
-      if (_isVehicleRepair) ...[
-        'Vehicle: $_vehicleYear ${_vehicleBrand.text.trim()} ${_vehicleModel.text.trim()} ($_vehicleType)',
-        'Can bring to shop: ${_yesNo(_canBringToShop)}',
-        'Needs towing: ${_yesNo(_needsTowing)}',
-        'Registered owner: ${_yesNo(_isRegisteredOwner)}',
-      ],
-      if (_isApplianceRepair) ...[
-        'Appliance: $_applianceType',
-        'Brand: ${_applianceBrand.text.trim()}',
-        'Model: ${_applianceModel.text.trim().isEmpty ? 'N/A' : _applianceModel.text.trim()}',
-        'Requires home service: ${_yesNo(_requiresHomeService)}',
-        'Requires pickup/delivery: ${_yesNo(_requiresPickup)}',
-      ],
-      if (_isDeviceRepair) ...[
-        'Device: $_deviceType',
-        'Brand: ${_applianceBrand.text.trim()}',
-        'Model: ${_applianceModel.text.trim().isEmpty ? 'N/A' : _applianceModel.text.trim()}',
-        'Requires home service: ${_yesNo(_requiresHomeService)}',
-        'Requires pickup/delivery: ${_yesNo(_requiresPickup)}',
-      ],
-      if (_photos.isNotEmpty)
-        'Attached photos: ${_photos.map((photo) => photo.name).join(', ')}',
-    ].join('\n');
-
-    final job = await _marketplace.createJob(
-      title: _title.text.trim(),
-      description: details,
-      category: _isVehicleRepair
-          ? 'Automotive > $_vehicleType'
-          : _isApplianceRepair
-              ? 'Appliance Repair > $_applianceType'
-              : _isDeviceRepair
-                  ? 'Device Repair > $_deviceType'
-                  : '$_category > $_subcategory',
-      maxBudget: (_offerAmount ?? 0) * workers,
-      paymentMethod: switch (_payment) {
-        'Cash on Delivery (after service)' || 'Cash after service' => 'CASH',
-        _ => 'ONLINE',
-      },
-      location: location,
-      recurrenceType: RecurrenceType.once,
-      parentJobId: widget.parentJobId,
-      scheduledAt: _immediate ? DateTime.now() : _start,
-      isEmergency: _immediate,
-    );
+    Job? job;
+    try {
+      final bytes = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+      bytes[6] = (bytes[6] & 15) | 64;
+      bytes[8] = (bytes[8] & 63) | 128;
+      final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      _requestID ??=
+          '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+      _submittedAt ??= _immediate ? DateTime.now() : _start;
+      final publicAnswers = <String, String>{
+        ...personalAnswerSummary(_subcategory, _answers, private: false),
+        if (_isVehicleRepair) ...{
+          'Vehicle':
+              '${_vehicleYear.text} ${_vehicleBrand.text.trim()} ${_vehicleModel.text.trim()}',
+          'Can bring to shop': _yesNo(_canBringToShop),
+          if (_canBringToShop == true) 'Needs towing': _yesNo(_needsTowing),
+          'Registered owner': _yesNo(_isRegisteredOwner),
+        },
+        if (_isApplianceRepair || _isDeviceRepair) ...{
+          'Brand': _applianceBrand.text.trim(),
+          'Model': _applianceModel.text.trim().isEmpty
+              ? 'N/A'
+              : _applianceModel.text.trim(),
+          'Requires home service': _yesNo(_requiresHomeService),
+          if (_requiresHomeService == false)
+            'Requires pickup / delivery': _yesNo(_requiresPickup),
+        },
+      };
+      // Returning to review without edits is still the same submission.
+      final fingerprint = jsonEncode({
+        'title': _title.text.trim(),
+        'description': _description.text.trim(),
+        'category': [
+          _category,
+          _subcategory,
+          _vehicleType,
+          _applianceType,
+          _deviceType
+        ],
+        'address': [
+          _address.text.trim(),
+          _barangay,
+          _city,
+          _contact.text.trim()
+        ],
+        'schedule': [
+          _immediate,
+          _start?.toIso8601String(),
+          _asap,
+          _end?.toIso8601String()
+        ],
+        'offer': [_offerAmount, _effectiveWorkers, _payment],
+        'location': [_location?.latitude, _location?.longitude],
+        'answers': publicAnswers,
+        'private': personalAnswerSummary(_subcategory, _answers, private: true),
+        'photos': [for (final photo in _photos) base64Encode(photo.bytes)],
+      });
+      if (_submissionFingerprint != null &&
+          _submissionFingerprint != fingerprint) {
+        _requestID =
+            '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+        _submittedAt = _immediate ? DateTime.now() : _start;
+      }
+      _submissionFingerprint = fingerprint;
+      job = await _marketplace.createJob(
+        title: _title.text.trim(),
+        description: _description.text.trim(),
+        category:
+            '$_category > ${_isVehicleRepair ? _vehicleType : _isApplianceRepair ? _applianceType : _isDeviceRepair ? _deviceType : _subcategory}',
+        maxBudget: (_offerAmount ?? 0) * _effectiveWorkers,
+        paymentMethod: _payment!.startsWith('Cash') ? 'CASH' : 'ONLINE',
+        location: _location,
+        recurrenceType: RecurrenceType.once,
+        parentJobId: widget.parentJobId,
+        scheduledAt: _submittedAt,
+        isEmergency: _immediate,
+        requestId: _requestID,
+        booking: {
+          'area': '${_barangay!.trim()}, ${_city!.trim()}',
+          'workers': _effectiveWorkers,
+          'unit_offer': _offerAmount,
+          'end_asap': _asap,
+          'end_at': _asap ? null : _end?.toUtc().toIso8601String(),
+          'answers': publicAnswers,
+          'private': {
+            'address':
+                '${_address.text.trim()}, ${_barangay!.trim()}, ${_city!.trim()}',
+            'contact': _contact.text.trim(),
+            'answers':
+                personalAnswerSummary(_subcategory, _answers, private: true),
+            'photos': [
+              for (final photo in _photos)
+                {'name': photo.name, 'data': base64Encode(photo.bytes)}
+            ],
+          },
+        },
+      );
+      _submissionError = _marketplace.lastCreateError;
+    } catch (_) {
+      _submissionError =
+          'Could not confirm your request. Your details are still here; retry to check or submit it.';
+    }
     if (!mounted) return;
     setState(() {
       _isSubmitting = false;
       _createdJob = job;
       _postSucceeded = job != null;
-      _step = _resultStep;
     });
+    _toStep(_resultStep);
     if (job != null) widget.onJobCreated();
   }
 
@@ -462,6 +619,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           child: _isSubmitting
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
+                  controller: _scroll,
                   padding: EdgeInsets.fromLTRB(
                       horizontalPadding, 32, horizontalPadding, 40),
                   child: _step == _resultStep ? _buildResult() : _buildForm(),
@@ -476,7 +634,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       children: [
         _ProgressHeader(
           step: _isSpecialized ? _step : _step + 1,
-          count: _isSpecialized ? 5 : 4,
+          count: _isSpecialized || _isPersonal ? 5 : 4,
         ),
         const SizedBox(height: 28),
         if (_isVehicleRepair)
@@ -496,9 +654,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             onCategoryChanged: (value) => setState(() {
               _category = value;
               _subcategory = _subcategories[value]!.first;
+              _answers.clear();
+              _step = 0;
             }),
-            onSubcategoryChanged: (value) =>
-                setState(() => _subcategory = value),
+            onSubcategoryChanged: (value) => setState(() {
+              _subcategory = value;
+              _answers.clear();
+              _step = 0;
+            }),
             categories: _subcategories,
           ),
         const SizedBox(height: 28),
@@ -508,8 +671,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         if (_isApplianceRepair && _step == 1) _buildApplianceDetailsStep(),
         if (_isDeviceRepair && _step == 0) _buildDeviceTypeStep(),
         if (_isDeviceRepair && _step == 1) _buildDeviceDetailsStep(),
-        if (_step == (_isSpecialized ? 2 : 0)) _buildLocationStep(),
-        if (_step == (_isSpecialized ? 3 : 1)) _buildDetailsStep(),
+        if (_isPersonal && _step == 0)
+          PersonalServiceForm(
+            service: _subcategory,
+            answers: _answers,
+            onChanged: (key, value) => setState(() => _answers[key] = value),
+          ),
+        if (_step == _locationStep) _buildLocationStep(),
+        if (_step == _detailsStep) _buildDetailsStep(),
         if (_step == _reviewStep) _buildReviewStep(),
         const SizedBox(height: 28),
         _NavigationButtons(
@@ -613,13 +782,17 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _YesNoQuestion(
           label: 'Willing to bring car to shop if needed?',
           value: _canBringToShop,
-          onChanged: (value) => setState(() => _canBringToShop = value),
+          onChanged: (value) => setState(() {
+            _canBringToShop = value;
+            if (!value) _needsTowing = null;
+          }),
         ),
-        _YesNoQuestion(
-          label: 'If Yes, do you require towing service?',
-          value: _needsTowing,
-          onChanged: (value) => setState(() => _needsTowing = value),
-        ),
+        if (_canBringToShop == true)
+          _YesNoQuestion(
+            label: 'If Yes, do you require towing service?',
+            value: _needsTowing,
+            onChanged: (value) => setState(() => _needsTowing = value),
+          ),
         _YesNoQuestion(
           label: 'Are you the registered vehicle owner?',
           value: _isRegisteredOwner,
@@ -901,32 +1074,19 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           builder: (context, constraints) {
             final stackFields = constraints.maxWidth < 300 ||
                 MediaQuery.textScalerOf(context).scale(14) > 18;
-            final barangay = DropdownButtonFormField<String>(
-              value: _barangay,
-              isExpanded: true,
-              hint: const Text('Barangay', overflow: TextOverflow.ellipsis),
-              items: const ['Poblacion', 'Bel-Air', 'San Lorenzo', 'Bangkal']
-                  .map((value) => DropdownMenuItem(
-                      value: value,
-                      child: Text(value, overflow: TextOverflow.ellipsis)))
-                  .toList(),
-              onChanged: (value) => setState(() => _barangay = value),
+            final barangay = TextFormField(
+              key: const ValueKey('barangay'),
+              initialValue: _barangay,
+              decoration: const InputDecoration(labelText: 'Barangay'),
+              maxLength: 80,
+              onChanged: (value) => _barangay = value,
             );
-            final city = DropdownButtonFormField<String>(
-              value: _city,
-              isExpanded: true,
-              hint: const Text('City / Town', overflow: TextOverflow.ellipsis),
-              items: const [
-                'Makati City',
-                'Taguig City',
-                'Pasig City',
-                'Manila'
-              ]
-                  .map((value) => DropdownMenuItem(
-                      value: value,
-                      child: Text(value, overflow: TextOverflow.ellipsis)))
-                  .toList(),
-              onChanged: (value) => setState(() => _city = value),
+            final city = TextFormField(
+              key: const ValueKey('city'),
+              initialValue: _city,
+              decoration: const InputDecoration(labelText: 'City / Town'),
+              maxLength: 80,
+              onChanged: (value) => _city = value,
             );
             if (stackFields) {
               return Column(
@@ -985,29 +1145,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           }),
         ),
         const SizedBox(height: 12),
-        InkWell(
-          onTap: () => _message('Promo FIRST10 will be checked at payment.'),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 116),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey, width: 3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('Save 10% • FIRST10',
-                    style: TextStyle(color: Color(0xFF6666FF), fontSize: 22)),
-                Text('Tap to apply at payment',
-                    style: TextStyle(color: _odgBlue)),
-              ],
-            ),
-          ),
-        ),
+        const _AdPanel(),
       ],
     );
   }
@@ -1023,13 +1161,15 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _ClientSummary(
           address: '${_address.text}, $_barangay, $_city',
           contact: _contact.text,
-          date: _immediate ? 'Immediately to ASAP' : _formatDate(_start!),
+          date: _schedule,
         ),
         const SizedBox(height: 18),
         TextField(
           controller: _title,
-          decoration:
-              const InputDecoration(hintText: 'What do you need fixed?'),
+          decoration: InputDecoration(
+              labelText: _isPersonal
+                  ? 'Service request title'
+                  : 'What do you need fixed?'),
         ),
         const SizedBox(height: 14),
         TextField(
@@ -1039,6 +1179,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           maxLength: 500,
           decoration: const InputDecoration(
             hintText: 'Describe what you need done...',
+            helperText:
+                'These notes are public. Keep contact and health details in the private fields.',
+            helperMaxLines: 3,
             alignLabelWithHint: true,
           ),
         ),
@@ -1052,44 +1195,47 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 : '${_photos.length} photo(s) selected'),
           ),
         ),
+        _photoPreview(editable: true),
         const SizedBox(height: 8),
         TextField(
           controller: _budget,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
-              hintText: _isSpecialized
-                  ? 'Your offer amount (₱)'
-                  : 'Your offer amount (₱) for each worker'),
+              hintText: _perWorker
+                  ? 'Your offer amount (₱) for each worker'
+                  : 'Your offer amount (₱)'),
         ),
         const SizedBox(height: 12),
-        if (!_isSpecialized)
+        if (!_isSpecialized && !_isPersonal)
           TextField(
             controller: _workers,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(hintText: 'Number of workers'),
           ),
         const SizedBox(height: 12),
-        const _TermsNotice(),
+        _TermsNotice(
+            personal: _isPersonal,
+            pickup: _isApplianceRepair || _isDeviceRepair),
       ],
     );
   }
 
   Widget _buildReviewStep() {
-    final workers = _isSpecialized ? 1 : (_workerCount ?? 1);
+    final workers = _effectiveWorkers;
     final each = _offerAmount ?? 0;
     return Column(
       children: [
         _ClientSummary(
-          address: '******** ${_city ?? ''}',
-          contact: _maskContact(_contact.text),
-          date: _immediate ? 'Immediately to ASAP' : _formatDate(_start!),
+          address: '${_address.text}, $_barangay, $_city',
+          contact: _contact.text,
+          date: _schedule,
         ),
-        if (!_isSpecialized) ...[
+        if (_perWorker) ...[
           const SizedBox(height: 8),
           Text(
-            '${_workerCount ?? 1} worker(s) • '
-            '₱${(_offerAmount ?? 0).toStringAsFixed(0)} each • '
-            '₱${((_workerCount ?? 1) * (_offerAmount ?? 0)).toStringAsFixed(0)} via $_payment',
+            '${_effectiveWorkers} worker(s) • '
+            '₱${(_offerAmount ?? 0).toStringAsFixed(2)} each • '
+            '₱${(_effectiveWorkers * (_offerAmount ?? 0)).toStringAsFixed(2)} ${_payment == null ? '' : 'via $_payment'}',
             textAlign: TextAlign.center,
             style:
                 const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),
@@ -1103,7 +1249,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             model: _vehicleModel.text,
             year: _vehicleYear.text,
             canBringToShop: _canBringToShop!,
-            needsTowing: _needsTowing!,
+            needsTowing: _needsTowing ?? false,
             isRegisteredOwner: _isRegisteredOwner!,
           ),
         ],
@@ -1114,7 +1260,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             brand: _applianceBrand.text,
             model: _applianceModel.text,
             requiresHomeService: _requiresHomeService!,
-            requiresPickup: _requiresPickup ?? false,
+            requiresPickup:
+                _requiresHomeService == false && _requiresPickup == true,
           ),
         ],
         if (_isDeviceRepair) ...[
@@ -1124,9 +1271,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             brand: _applianceBrand.text,
             model: _applianceModel.text,
             requiresHomeService: _requiresHomeService!,
-            requiresPickup: _requiresPickup ?? false,
+            requiresPickup:
+                _requiresHomeService == false && _requiresPickup == true,
           ),
         ],
+        if (_isPersonal) _personalSummary(),
         const SizedBox(height: 20),
         Text(_title.text,
             textAlign: TextAlign.center,
@@ -1141,29 +1290,34 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         Text(_photos.isEmpty
             ? 'No Photos Attached'
             : '${_photos.length} Photo(s) Attached'),
+        _photoPreview(),
         const SizedBox(height: 24),
         DropdownButtonFormField<String>(
           value: _payment,
+          isExpanded: true,
           hint: const Text('Select Payment Option'),
           items: const [
             'Card (secure checkout)',
             'Cash on Delivery (after service)',
           ]
-              .map(
-                  (value) => DropdownMenuItem(value: value, child: Text(value)))
+              .map((value) => DropdownMenuItem(
+                  value: value,
+                  child: Text(value, overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: (value) => setState(() => _payment = value),
         ),
         const SizedBox(height: 12),
         Text(
-          _isSpecialized
-              ? 'Offer amount: ₱${each.toStringAsFixed(0)}'
-              : '$workers worker(s) • ₱${each.toStringAsFixed(0)} each • '
-                  '₱${(workers * each).toStringAsFixed(0)} total offer',
+          !_perWorker
+              ? 'Offer amount: ₱${each.toStringAsFixed(2)}'
+              : '$workers worker(s) • ₱${each.toStringAsFixed(2)} each • '
+                  '₱${(workers * each).toStringAsFixed(2)} total offer',
           style: const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 12),
-        const _TermsNotice(),
+        _TermsNotice(
+            personal: _isPersonal,
+            pickup: _isApplianceRepair || _isDeviceRepair),
       ],
     );
   }
@@ -1200,7 +1354,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         ),
         const SizedBox(height: 22),
         const Text(
-          'Personal Client Information will only be viewable upon job acceptance.',
+          'Address, contact details, private answers and photos are shared only with your accepted provider.',
           textAlign: TextAlign.center,
           style: TextStyle(color: _odgBlue, fontSize: 12),
         ),
@@ -1237,23 +1391,23 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _ClientSummary(
           address: '******** ${_city ?? ''}',
           contact: _maskContact(_contact.text),
-          date: _immediate ? 'Immediately to ASAP' : _formatDate(_start!),
+          date: _schedule,
         ),
-        if (!_isSpecialized) ...[
+        if (_perWorker) ...[
           const SizedBox(height: 8),
           Text(
-            '${_workerCount ?? 1} worker(s) • '
-            '₱${(_offerAmount ?? 0).toStringAsFixed(0)} each • '
-            '₱${((_workerCount ?? 1) * (_offerAmount ?? 0)).toStringAsFixed(0)} via $_payment',
+            '${_effectiveWorkers} worker(s) • '
+            '₱${(_offerAmount ?? 0).toStringAsFixed(2)} each • '
+            '₱${(_effectiveWorkers * (_offerAmount ?? 0)).toStringAsFixed(2)} ${_payment == null ? '' : 'via $_payment'}',
             textAlign: TextAlign.center,
             style:
                 const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),
           ),
         ],
-        if (_isApplianceRepair || _isDeviceRepair) ...[
+        if (!_perWorker) ...[
           const SizedBox(height: 8),
           Text(
-            'Offer Amount: ₱${(_offerAmount ?? 0).toStringAsFixed(0)} via $_payment',
+            'Offer Amount: ₱${(_offerAmount ?? 0).toStringAsFixed(2)} ${_payment == null ? '' : 'via $_payment'}',
             textAlign: TextAlign.center,
             style:
                 const TextStyle(color: _odgBlue, fontWeight: FontWeight.w800),
@@ -1266,7 +1420,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             brand: _applianceBrand.text,
             model: _applianceModel.text,
             requiresHomeService: _requiresHomeService!,
-            requiresPickup: _requiresPickup ?? false,
+            requiresPickup:
+                _requiresHomeService == false && _requiresPickup == true,
           ),
         ],
         if (_isVehicleRepair) ...[
@@ -1277,7 +1432,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             model: _vehicleModel.text,
             year: _vehicleYear.text,
             canBringToShop: _canBringToShop!,
-            needsTowing: _needsTowing!,
+            needsTowing: _needsTowing ?? false,
             isRegisteredOwner: _isRegisteredOwner!,
           ),
         ],
@@ -1288,9 +1443,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
             brand: _applianceBrand.text,
             model: _applianceModel.text,
             requiresHomeService: _requiresHomeService!,
-            requiresPickup: _requiresPickup ?? false,
+            requiresPickup:
+                _requiresHomeService == false && _requiresPickup == true,
           ),
         ],
+        if (_isPersonal) _personalSummary(),
         const SizedBox(height: 20),
         Text(_title.text,
             style: const TextStyle(
@@ -1304,13 +1461,18 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         Text(_photos.isEmpty
             ? 'No Photos Attached'
             : '${_photos.length} Photo(s) Attached'),
+        _photoPreview(),
         const SizedBox(height: 28),
+        if (!success && _submissionError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(_submissionError!, textAlign: TextAlign.center),
+          ),
         if (!success)
           _OdgButton(
               label: 'RETRY',
               icon: Icons.refresh,
               onPressed: () {
-                setState(() => _step = _reviewStep);
                 _submit();
               }),
         if (!success) const SizedBox(height: 10),
@@ -1322,11 +1484,24 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               : () => setState(() {
                     _postSucceeded = null;
                     _step = _reviewStep;
+                    if (_scroll.hasClients) _scroll.jumpTo(0);
                   }),
         ),
       ],
     );
   }
+
+  Widget _personalSummary() => Column(children: [
+        for (final entry
+            in personalAnswerSummary(_subcategory, _answers).entries)
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('${entry.key}: ${entry.value}',
+                    style: const TextStyle(color: _odgBlue)),
+              )),
+      ]);
 
   IconData get _categoryIcon {
     switch (_category) {
@@ -1556,26 +1731,36 @@ class _ChosenPersonalCareHeader extends StatelessWidget {
     switch (service) {
       case 'Barber':
         return Icons.content_cut_rounded;
+      case 'Nail Care':
       case 'Manicure & Pedicure':
         return Icons.back_hand_rounded;
       case 'Hair Styling, Coloring & Care':
         return Icons.face_retouching_natural_rounded;
       case 'Massage':
         return Icons.spa_rounded;
+      case 'Caregiving / Nursing':
       case 'Elderly Care':
         return Icons.elderly_rounded;
+      case 'Babysitting':
       case 'Child Care':
         return Icons.child_care_rounded;
       case 'Physical Therapy':
         return Icons.accessibility_new_rounded;
       case 'Occupational Therapy':
         return Icons.health_and_safety_rounded;
+      case 'Tutorial':
       case 'Tutorial Services':
         return Icons.school_rounded;
+      case 'Housekeeping':
       case 'House Keeping':
         return Icons.cleaning_services_rounded;
+      case 'Pet Care':
       case 'Pet Grooming':
         return Icons.pets_rounded;
+      case 'Tailoring':
+        return Icons.content_cut_rounded;
+      case 'Landscaping':
+        return Icons.park_rounded;
       case 'Laundry & Ironing':
         return Icons.local_laundry_service_rounded;
       default:
@@ -2042,8 +2227,9 @@ class _ServiceHeader extends StatelessWidget {
               style: const TextStyle(
                   color: _odgBlue, fontSize: 18, fontWeight: FontWeight.w800),
               items: categories.keys
-                  .map((value) =>
-                      DropdownMenuItem(value: value, child: Text(value)))
+                  .map((value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value, overflow: TextOverflow.ellipsis)))
                   .toList(),
               onChanged: (value) {
                 if (value != null) onCategoryChanged(value);
@@ -2062,8 +2248,9 @@ class _ServiceHeader extends StatelessWidget {
               style: const TextStyle(
                   color: _odgBlue, fontSize: 18, fontWeight: FontWeight.w800),
               items: categories[category]!
-                  .map((value) =>
-                      DropdownMenuItem(value: value, child: Text(value)))
+                  .map((value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value, overflow: TextOverflow.ellipsis)))
                   .toList(),
               onChanged: (value) {
                 if (value != null) onSubcategoryChanged(value);
@@ -2127,15 +2314,15 @@ class _DateField extends StatelessWidget {
 }
 
 class _TermsNotice extends StatelessWidget {
-  const _TermsNotice();
+  final bool personal;
+  final bool pickup;
+  const _TermsNotice({this.personal = false, this.pickup = false});
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
-      '*Be advised offer is for labor only. Cost of materials and everything '
-      'else related to completion is on you unless stated by Service Provider.\n'
-      '*Amount is subject to change. Service Providers may bid to increase the '
-      'offered amount. By clicking GRIND!, you agree to the Terms & Conditions.',
+    return Text(
+      '${personal ? 'Offer includes labor, travel and essentials.' : pickup ? 'Offer covers labor and requested pickup. Parts are separate unless agreed with the provider.' : 'Offer covers labor only. Materials are separate unless agreed with the provider.'}\n'
+      'Providers may propose a different amount. You choose whether to accept their offer. Payment is arranged after a provider is selected.',
       textAlign: TextAlign.center,
       style: TextStyle(color: _odgBlue, fontSize: 11),
     );
