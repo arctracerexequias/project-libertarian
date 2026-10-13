@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'marketplace_service.dart';
+import 'booking_terms_screen.dart';
 import 'models.dart';
 import 'personal_service_form.dart';
 
@@ -41,6 +44,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final _marketplace = MarketplaceService();
   final _picker = ImagePicker();
   final _address = TextEditingController();
+  final _barangayController = TextEditingController();
+  final _cityController = TextEditingController();
   final _contact = TextEditingController();
   final _title = TextEditingController();
   final _description = TextEditingController();
@@ -56,10 +61,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool _immediate = true;
   bool _asap = true;
   bool _isSubmitting = false;
+  bool _isLocating = false;
   bool? _postSucceeded;
   Job? _createdJob;
   DateTime? _start;
   DateTime? _end;
+  DateTime? _serviceDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
   String? _barangay;
   String? _city;
   String? _payment;
@@ -97,6 +106,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool get _isPersonal =>
       _category == 'Personal Care' &&
       personalServices.containsKey(_subcategory);
+  bool get _usesTimeSlot => _isPersonal && _subcategory != 'Tailoring';
   int get _locationStep => _isPersonal ? 1 : (_isSpecialized ? 2 : 0);
   int get _detailsStep => _locationStep + 1;
   int get _reviewStep => _locationStep + 2;
@@ -215,6 +225,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   void dispose() {
     _scroll.dispose();
     _address.dispose();
+    _barangayController.dispose();
+    _cityController.dispose();
     _contact.dispose();
     _title.dispose();
     _description.dispose();
@@ -227,6 +239,102 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     _applianceModel.dispose();
     super.dispose();
   }
+
+  void _syncTimeSlot() {
+    final date = _immediate ? DateTime.now() : _serviceDate;
+    DateTime? combine(TimeOfDay? time) => date == null || time == null
+        ? null
+        : DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    _start = _immediate ? null : combine(_startTime);
+    _end = _asap ? null : combine(_endTime);
+  }
+
+  Future<void> _pickServiceDate() async {
+    final now = DateUtils.dateOnly(DateTime.now());
+    final selected = _serviceDate;
+    final date = await showDatePicker(
+      context: context,
+      initialDate: selected != null && !selected.isBefore(now) ? selected : now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    setState(() {
+      _serviceDate = date;
+      _immediate = false;
+      _syncTimeSlot();
+    });
+  }
+
+  Future<void> _pickServiceTime(bool start) async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: (start ? _startTime : _endTime) ?? TimeOfDay.now(),
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      if (start) {
+        _startTime = time;
+      } else {
+        _endTime = time;
+        _asap = false;
+      }
+      _syncTimeSlot();
+    });
+  }
+
+  Widget _buildTimeSlot() => Column(children: [
+        _DateField(
+          label: _immediate
+              ? 'Service Date: Today'
+              : _serviceDate == null
+                  ? 'Service Date'
+                  : 'Service Date: ${MaterialLocalizations.of(context).formatMediumDate(_serviceDate!)}',
+          onTap: _pickServiceDate,
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Set to Immediately'),
+          value: _immediate,
+          onChanged: (value) => setState(() {
+            _immediate = value ?? false;
+            _syncTimeSlot();
+          }),
+        ),
+        Wrap(spacing: 12, runSpacing: 12, children: [
+          OutlinedButton.icon(
+            key: const ValueKey('service-start-time'),
+            onPressed: _immediate ? null : () => _pickServiceTime(true),
+            icon: const Icon(Icons.schedule),
+            label: Text(_immediate
+                ? 'Start: Immediately'
+                : _startTime == null
+                    ? 'Start Time'
+                    : 'Start: ${_startTime!.format(context)}'),
+          ),
+          OutlinedButton.icon(
+            key: const ValueKey('service-end-time'),
+            onPressed: () => _pickServiceTime(false),
+            icon: const Icon(Icons.schedule),
+            label: Text(_asap
+                ? 'End Time'
+                : _endTime == null
+                    ? 'End Time'
+                    : 'End: ${_endTime!.format(context)}'),
+          ),
+        ]),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Set to ASAP'),
+          value: _asap,
+          onChanged: (value) => setState(() {
+            _asap = value ?? false;
+            _syncTimeSlot();
+          }),
+        ),
+        const Text('Start and end times are on the selected service date.',
+            style: TextStyle(color: _odgBlue, fontSize: 12)),
+      ]);
 
   Future<void> _pickDate(bool start) async {
     final now = DateTime.now();
@@ -308,19 +416,83 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       );
 
   Future<void> _useCurrentLocation() async {
-    final location = await _resolveLocation();
-    if (!mounted) return;
-    if (location == null) {
-      _message('Could not access your current location.');
-      return;
-    }
-    setState(() {
-      _location = location;
-      if (_address.text.trim().isEmpty) {
-        _message('Location pinned. Enter the complete service address below.');
+    if (_isLocating) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _isLocating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted)
+          _message('Turn on your phone’s location services and try again.');
+        return;
       }
-    });
-    _message('Current location added to this request.');
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (!mounted) return;
+      if (permission == LocationPermission.deniedForever) {
+        _message(
+            'Allow location access in your phone’s app settings, then try again.');
+        return;
+      }
+      if (permission != LocationPermission.whileInUse &&
+          permission != LocationPermission.always) {
+        _message('Allow location access to fill in your current address.');
+        return;
+      }
+      // Always get a fresh fix: the home screen's location may be stale.
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 20),
+      );
+      if (!mounted) return;
+      final places = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      ).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      if (places.isEmpty) {
+        _message(
+            'No address was found here. Enter your address manually or try again.');
+        return;
+      }
+      final place = places.first;
+      final street = (place.street ?? '').trim();
+      final address = street.isNotEmpty
+          ? street
+          : [place.subThoroughfare, place.thoroughfare]
+              .whereType<String>()
+              .map((part) => part.trim())
+              .where((part) => part.isNotEmpty)
+              .join(' ');
+      final barangay = (place.subLocality ?? '').trim();
+      final city = (place.locality ?? '').trim();
+      if (address.isEmpty && barangay.isEmpty && city.isEmpty) {
+        _message(
+            'No street address was found here. Enter your address manually or try again.');
+        return;
+      }
+      setState(() {
+        _location = LatLng(position.latitude, position.longitude);
+        _address.text = address;
+        _barangay = barangay;
+        _city = city;
+        _barangayController.text = barangay;
+        _cityController.text = city;
+      });
+      _message(
+          'Current address filled in. Check the details and add any missing unit, barangay, or city.');
+    } on TimeoutException {
+      if (mounted)
+        _message(
+            'Location lookup timed out. Try again where GPS and internet are available.');
+    } catch (_) {
+      if (mounted)
+        _message(
+            'Could not look up your address. Check location access and internet, or enter it manually.');
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
   }
 
   void _message(String text) {
@@ -385,6 +557,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     final locationStep = _locationStep;
     final detailsStep = _detailsStep;
     if (_step == locationStep) {
+      if (_usesTimeSlot) _syncTimeSlot();
       if (_address.text.trim().isEmpty ||
           (_barangay ?? '').trim().isEmpty ||
           (_city ?? '').trim().isEmpty ||
@@ -394,7 +567,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         return false;
       }
       if ((!_immediate && _start == null) || (!_asap && _end == null)) {
-        _message('Select the service dates.');
+        _message(_usesTimeSlot
+            ? 'Select the service date and required start / end times.'
+            : 'Select the service dates.');
         return false;
       }
       final now = DateTime.now();
@@ -440,6 +615,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   }
 
   void _next() {
+    if (_isLocating) return;
     if (!_validateStep()) return;
     if (_step == _reviewStep) {
       _submit();
@@ -454,26 +630,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     } else {
       _toStep(_step - 1);
     }
-  }
-
-  Future<LatLng?> _resolveLocation() async {
-    if (_location != null) return _location;
-    if (widget.initialLocation != null) return widget.initialLocation;
-    try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.whileInUse ||
-          permission == LocationPermission.always) {
-        final position = await Geolocator.getCurrentPosition()
-            .timeout(const Duration(seconds: 10));
-        return LatLng(position.latitude, position.longitude);
-      }
-    } catch (_) {
-      // The request remains valid without precise coordinates.
-    }
-    return null;
   }
 
   Future<void> _submit() async {
@@ -1060,12 +1216,18 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       children: [
         TextField(
           controller: _address,
+          readOnly: _isLocating,
           decoration: InputDecoration(
             hintText: 'Home / Building / Unit Number',
             suffixIcon: IconButton(
               tooltip: 'Use current location',
-              onPressed: _useCurrentLocation,
-              icon: const Icon(Icons.location_on, color: _odgBlue),
+              onPressed: _isLocating ? null : _useCurrentLocation,
+              icon: _isLocating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.location_on, color: _odgBlue),
             ),
           ),
         ),
@@ -1076,14 +1238,16 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 MediaQuery.textScalerOf(context).scale(14) > 18;
             final barangay = TextFormField(
               key: const ValueKey('barangay'),
-              initialValue: _barangay,
+              controller: _barangayController,
+              readOnly: _isLocating,
               decoration: const InputDecoration(labelText: 'Barangay'),
               maxLength: 80,
               onChanged: (value) => _barangay = value,
             );
             final city = TextFormField(
               key: const ValueKey('city'),
-              initialValue: _city,
+              controller: _cityController,
+              readOnly: _isLocating,
               decoration: const InputDecoration(labelText: 'City / Town'),
               maxLength: 80,
               onChanged: (value) => _city = value,
@@ -1112,38 +1276,46 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        _DateField(
-          label: _start == null ? 'Service Date Start' : _formatDate(_start!),
-          onTap: () => _pickDate(true),
-        ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.trailing,
-          title: const Text('Set to Immediately',
-              textAlign: TextAlign.right,
-              style: TextStyle(color: _odgBlue, fontWeight: FontWeight.w700)),
-          value: _immediate,
-          onChanged: (value) => setState(() {
-            _immediate = value ?? false;
-            if (_immediate) _start = null;
-          }),
-        ),
-        _DateField(
-          label: _end == null ? 'Service Date End' : _formatDate(_end!),
-          onTap: () => _pickDate(false),
-        ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.trailing,
-          title: const Text('Set to ASAP',
-              textAlign: TextAlign.right,
-              style: TextStyle(color: _odgBlue, fontWeight: FontWeight.w700)),
-          value: _asap,
-          onChanged: (value) => setState(() {
-            _asap = value ?? false;
-            if (_asap) _end = null;
-          }),
-        ),
+        if (_usesTimeSlot)
+          _buildTimeSlot()
+        else ...[
+          _DateField(
+            label: _start == null ? 'Service Date Start' : _formatDate(_start!),
+            onTap: () => _pickDate(true),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.trailing,
+            title: const Text('Set to Immediately',
+                textAlign: TextAlign.right,
+                style: TextStyle(color: _odgBlue, fontWeight: FontWeight.w700)),
+            value: _immediate,
+            onChanged: (value) => setState(() {
+              _immediate = value ?? false;
+              if (_immediate) _start = null;
+            }),
+          ),
+          _DateField(
+            label: _end == null
+                ? (_isPersonal && _subcategory == 'Tailoring'
+                    ? 'Project Deadline'
+                    : 'Service Date End')
+                : _formatDate(_end!),
+            onTap: () => _pickDate(false),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.trailing,
+            title: const Text('Set to ASAP',
+                textAlign: TextAlign.right,
+                style: TextStyle(color: _odgBlue, fontWeight: FontWeight.w700)),
+            value: _asap,
+            onChanged: (value) => setState(() {
+              _asap = value ?? false;
+              if (_asap) _end = null;
+            }),
+          ),
+        ],
         const SizedBox(height: 12),
         const _AdPanel(),
       ],
@@ -1168,7 +1340,16 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           controller: _title,
           decoration: InputDecoration(
               labelText: _isPersonal
-                  ? 'Service request title'
+                  ? switch (_subcategory) {
+                      'Massage' => 'What type of massage?',
+                      'Nail Care' => 'Nail care request title',
+                      'Tailoring' => 'What do you need tailored?',
+                      'Babysitting' => 'Babysitting title',
+                      'Caregiving / Nursing' => 'What care do you need?',
+                      'Pet Care' => 'Pet care request title',
+                      'Tutorial' => 'Tutorial request title',
+                      _ => 'Service request title',
+                    }
                   : 'What do you need fixed?'),
         ),
         const SizedBox(height: 14),
@@ -1318,6 +1499,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _TermsNotice(
             personal: _isPersonal,
             pickup: _isApplianceRepair || _isDeviceRepair),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const BookingTermsScreen())),
+          child: const Text('Terms & Conditions (draft)'),
+        ),
       ],
     );
   }

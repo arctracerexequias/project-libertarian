@@ -133,6 +133,28 @@ void main() {
     await enter('Barangay', 'Poblacion');
     await enter('City / Town', 'Makati');
     await enter('Contact Number', '+63 917 123 4567');
+    // A scheduled personal service must retain its date and time on review.
+    await tap(find.text('Service Date: Today'));
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    tester
+        .widget<CalendarDatePicker>(find.byType(CalendarDatePicker))
+        .onDateChanged(tomorrow);
+    await tap(find.text('OK'));
+    await tap(find.text('NEXT'));
+    expect(find.text('Select the service date and required start / end times.'),
+        findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tap(find.byKey(const ValueKey('service-start-time')));
+    await tap(find.text('OK'));
+    // An explicit end is required when ASAP is unchecked.
+    await tap(find.text('Set to ASAP'));
+    await tap(find.text('NEXT'));
+    expect(find.text('Select the service date and required start / end times.'),
+        findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tap(find.text('Set to ASAP'));
     await tap(find.text('NEXT'));
     await enter('Service request title', 'Trim the trees');
     await enter('Describe what you need done...',
@@ -140,6 +162,12 @@ void main() {
     await enter('Your offer amount (₱) for each worker', '600');
     await tap(find.text('NEXT'));
     expect(find.textContaining('₱1200.00 total offer'), findsOneWidget);
+    await tap(find.text('Terms & Conditions (draft)'));
+    expect(find.text('DRAFT — not yet effective'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('₱1200.00 total offer'), findsOneWidget);
+
     await tap(find.byType(DropdownButtonFormField<String>));
     await tap(find.text('Cash on Delivery (after service)').last);
     await tap(find.text('GRIND!'));
@@ -164,6 +192,10 @@ void main() {
     expect(
         payload['booking']['answers'].values, contains('Pruning / Trimming'));
     expect(payload['payment_method'], 'CASH');
+    final scheduled = DateTime.parse(payload['scheduled_at']).toLocal();
+    expect(DateUtils.isSameDay(scheduled, tomorrow), isTrue);
+    expect(payload['is_emergency'], isFalse);
+    expect(payload['booking']['end_asap'], isTrue);
     expect(tester.takeException(), isNull);
   });
 }
